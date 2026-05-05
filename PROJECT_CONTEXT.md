@@ -6,13 +6,12 @@
 
 ```text
 觀測窗：影片發布後 0-3 小時
-主標籤：is_viral_24h
-延伸標籤：is_viral_48h
+主標籤：is_viral_48h
 任務：binary classification
 切分：依 publish_time 做 train / valid / test，不隨機打散
 ```
 
-所有 feature 只能使用 0-3 小時內可取得的資料。24h / 48h 資料只能用來做 label。
+所有 feature 只能使用 0-3 小時內可取得的資料。48h 資料只能用來做 label。
 
 ## 1. 建立資料夾與檔案結構
 
@@ -117,7 +116,6 @@ https://www.youtube.com/shorts/{video_id}
 爬取頻率：
 
 - 0-3h：每 5-10 分鐘一次
-- 24h：至少一筆
 - 48h：至少一筆
 
 ### 2.5 爬留言
@@ -145,17 +143,17 @@ https://www.youtube.com/shorts/{video_id}
 4. 移除 `video_status != public` 的影片。
 5. 同影片同時間點重複資料保留最新一筆。
 6. 少量缺值線性插補。
-7. 缺 0-3h 主要序列或缺 24h label 的影片排除。
+7. 缺 0-3h 主要序列或缺 48h label 的影片排除。
 8. 建立 `log1p` 欄位，例如觀看數、訂閱數。
 9. 產出 `label_dataset.csv`、`tabular_features.csv`、`sequences/{video_id}.npy`。
 
 ## 4. 爆紅標籤要怎麼做
 
-主定義：**每支影片先算出自己的 24 小時爆紅觀看數門檻，實際 24 小時觀看數達標才算爆紅。**
+主定義：**每支影片先算出自己的 48 小時爆紅觀看數門檻，實際 48 小時觀看數達標才算爆紅。**
 
 需要：
 
-- `views_24h`
+- `views_48h`
 - `subscriber_count_at_publish`
 - `is_shorts`
 
@@ -163,22 +161,22 @@ https://www.youtube.com/shorts/{video_id}
 
 ```text
 effective_subscriber_count = max(subscriber_count_at_publish, 1000)
-audience_normalized_views_24h = views_24h / effective_subscriber_count
-viral_score_24h = log1p(views_24h) - log1p(effective_subscriber_count)
+audience_normalized_views_48h = views_48h / effective_subscriber_count
+viral_score_48h = log1p(views_48h) - log1p(effective_subscriber_count)
 ```
 
 最低觀看門檻：
 
-| 型態 | `min_abs_views` |
+| 型態 | `min_abs_views_48h` |
 |---|---:|
-| 長影片 | 1,000 |
-| Shorts | 5,000 |
+| 長影片 | 2,000 |
+| Shorts | 10,000 |
 
 每支影片的正式爆紅觀看數門檻：
 
 ```text
-viral_view_threshold_24h = max(
-    min_abs_views,
+viral_view_threshold_48h = max(
+    min_abs_views_48h,
     2 * effective_subscriber_count
 )
 ```
@@ -186,22 +184,15 @@ viral_view_threshold_24h = max(
 主標籤：
 
 ```text
-is_viral_24h = views_24h >= viral_view_threshold_24h
-```
-
-48 小時延伸標籤使用同一個觀看數門檻，只是改看 48 小時觀看數：
-
-```text
-viral_view_threshold_48h = viral_view_threshold_24h
 is_viral_48h = views_48h >= viral_view_threshold_48h
 ```
 
 例子：
 
-| 頻道訂閱數 | 型態 | `effective_subscriber_count` | `viral_view_threshold_24h` |
+| 頻道訂閱數 | 型態 | `effective_subscriber_count` | `viral_view_threshold_48h` |
 |---:|---|---:|---:|
 | 500 | 長影片 | 1,000 | 2,000 |
-| 500 | Shorts | 1,000 | 5,000 |
+| 500 | Shorts | 1,000 | 10,000 |
 | 10,000 | 長影片 | 10,000 | 20,000 |
 | 10,000 | Shorts | 10,000 | 20,000 |
 | 100,000 | 長影片 | 100,000 | 200,000 |
@@ -211,15 +202,15 @@ is_viral_48h = views_48h >= viral_view_threshold_48h
 ```text
 non_viral   < 1.0x
 strong      1.0x - 2.0x
-viral       2.0x - 5.0x 且達最低觀看門檻
-super_viral >= 5.0x 且達最低觀看門檻
+viral       2.0x - 5.0x 且達 48h 最低觀看門檻
+super_viral >= 5.0x 且達 48h 最低觀看門檻
 ```
 
 也要保留 baseline：
 
 ```text
-growth_rate_24h = views_24h / max(views_3h, 1)
-is_high_growth_24h = growth_rate_24h >= median(growth_rate_24h on train)
+growth_rate_48h = views_48h / max(views_3h, 1)
+is_high_growth_48h = growth_rate_48h >= median(growth_rate_48h on train)
 ```
 
 `label_dataset.csv` 至少要有：
@@ -228,19 +219,16 @@ is_high_growth_24h = growth_rate_24h >= median(growth_rate_24h on train)
 - `is_shorts`
 - `publish_time`
 - `views_3h`
-- `views_24h`
 - `views_48h`
 - `subscriber_count_at_publish`
 - `effective_subscriber_count`
-- `viral_view_threshold_24h`
 - `viral_view_threshold_48h`
-- `audience_normalized_views_24h`
-- `viral_score_24h`
-- `is_viral_24h`
-- `viral_level_24h`
+- `audience_normalized_views_48h`
+- `viral_score_48h`
 - `is_viral_48h`
-- `growth_rate_24h`
-- `is_high_growth_24h`
+- `viral_level_48h`
+- `growth_rate_48h`
+- `is_high_growth_48h`
 
 ## 5. 表格特徵要做哪些
 
@@ -392,11 +380,11 @@ test  = 最晚 15%
 ## 10. 防資料洩漏規則
 
 - 3h 後的資料不能進 feature。
-- `views_24h`、`views_48h` 只能做 label。
+- `views_48h` 只能做 label。
 - 留言 feature 只能用 0-3h 內留言。
 - train / valid / test 依發布時間切。
 - scaler、encoder、threshold 只能 fit train。
-- `is_high_growth_24h` 的 median 只能用 train 算。
+- `is_high_growth_48h` 的 median 只能用 train 算。
 - Stacking 不能用 base model 的 train in-sample prediction。
 
 ## 11. 最後要產出哪些檔案
