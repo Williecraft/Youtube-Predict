@@ -7,11 +7,12 @@
 ```text
 觀測窗：影片發布後 0-3 小時
 主標籤：is_viral_48h
-任務：binary classification
+主任務：binary classification，預測 is_viral_48h
+副任務：regression，用任意連續 7 天資料預測下一天新增觀看數 log_next_day_views
 切分：依 publish_time 做 train / valid / test，不隨機打散
 ```
 
-所有 feature 只能使用 0-3 小時內可取得的資料。48h 資料只能用來做 label。
+分類 feature 只能使用 0-3 小時內可取得的資料。回歸 feature 使用某個 7 天視窗內的資料，target 是該視窗後 1 天的新增觀看數。48h 資料只能用來做分類 label；回歸 target day 的資料不能進 feature。
 
 ## 1. 建立資料夾與檔案結構
 
@@ -26,7 +27,10 @@ data/
 ├── processed/
 │   ├── label_dataset.csv
 │   ├── tabular_features.csv
-│   └── sequences/{video_id}.npy
+│   ├── regression_dataset.csv
+│   ├── regression_features_7d.csv
+│   ├── sequences_3h/{video_id}.npy
+│   └── sequences_7d/{sample_id}.npy
 └── split/
     ├── train.csv
     ├── valid.csv
@@ -117,6 +121,7 @@ https://www.youtube.com/shorts/{video_id}
 
 - 0-3h：每 5-10 分鐘一次
 - 48h：至少一筆
+- 之後每天至少一筆，用來建立回歸的 7 天滑動視窗
 
 ### 2.5 爬留言
 
@@ -143,9 +148,11 @@ https://www.youtube.com/shorts/{video_id}
 4. 移除 `video_status != public` 的影片。
 5. 同影片同時間點重複資料保留最新一筆。
 6. 少量缺值線性插補。
-7. 缺 0-3h 主要序列或缺 48h label 的影片排除。
-8. 建立 `log1p` 欄位，例如觀看數、訂閱數。
-9. 產出 `label_dataset.csv`、`tabular_features.csv`、`sequences/{video_id}.npy`。
+7. 缺 0-3h 主要序列的影片排除。
+8. 分類資料缺 48h label 的影片排除。
+9. 回歸資料用每日累積觀看數建立 7 天滑動視窗樣本。
+10. 建立 `log1p` 欄位，例如觀看數、訂閱數。
+11. 產出 `label_dataset.csv`、`tabular_features.csv`、`regression_dataset.csv`、`regression_features_7d.csv`、`sequences_3h/{video_id}.npy`、`sequences_7d/{sample_id}.npy`。
 
 ## 4. 爆紅標籤要怎麼做
 
@@ -230,7 +237,80 @@ is_high_growth_48h = growth_rate_48h >= median(growth_rate_48h on train)
 - `growth_rate_48h`
 - `is_high_growth_48h`
 
-## 5. 表格特徵要做哪些
+## 5. 觀看數回歸副主題
+
+副主題：只要某支影片有連續 7 天中途資訊，就建立一筆回歸樣本，用這 7 天預測下一天新增觀看數。
+
+每一筆回歸樣本不是一支影片，而是一個影片的 7 天視窗。
+
+```text
+sample_id = {video_id}_{window_start_day}
+input window = [window_start_day, window_start_day + 7)
+target day = [window_start_day + 7, window_start_day + 8)
+```
+
+不要直接預測 target day 結束時的累積觀看數，因為它會被視窗結束時的累積觀看數強烈支配。改預測下一天新增觀看數：
+
+```text
+window_end_views = views at window_start_day + 7
+target_end_views = views at window_start_day + 8
+next_day_views = max(target_end_views - window_end_views, 0)
+
+regression_target = log_next_day_views = log1p(next_day_views)
+predicted_next_day_views = expm1(predicted_log_next_day_views)
+```
+
+回歸模型輸入：
+
+- 使用 `regression_features_7d.csv`
+- LSTM 使用 `sequences_7d/{sample_id}.npy`
+- 不可使用 `target_end_views` 或 `next_day_views` 當 feature
+
+`regression_dataset.csv` 至少要有：
+
+- `sample_id`
+- `video_id`
+- `window_start_day`
+- `window_end_day`
+- `target_day`
+- `window_start_views`
+- `window_end_views`
+- `target_end_views`
+- `next_day_views`
+- `log_next_day_views`
+
+回歸模型要做：
+
+- Linear Regression 或 Ridge Regression baseline
+- LightGBM Regressor
+- LSTM Regressor
+
+回歸評估指標：
+
+| 指標 | 用途 |
+|---|---|
+| MAE | 平均差多少觀看數 |
+| RMSE | 對大誤差更敏感 |
+| RMSLE | 適合長尾觀看數 |
+| R2 | 解釋變異比例 |
+
+輸出檔案：
+
+```text
+results/regression_metrics.csv
+```
+
+`regression_metrics.csv` 至少記錄：
+
+- `target_name`
+- `feature_group`
+- `model_name`
+- `mae`
+- `rmse`
+- `rmsle`
+- `r2`
+
+## 6. 表格特徵要做哪些
 
 核心特徵：
 
@@ -252,7 +332,7 @@ is_high_growth_48h = growth_rate_48h >= median(growth_rate_48h on train)
 - `like_view_ratio_3h`
 - `comment_view_ratio_3h`
 
-## 6. Valence-Arousal 要做哪些
+## 7. Valence-Arousal 要做哪些
 
 每則留言要估：
 
@@ -287,12 +367,12 @@ high_arousal = arousal >= 0.65
 2. 再把情緒類別 mapping 到 valence / arousal。
 3. 若做不到，先用 sentiment score 當 valence proxy，用驚嘆號、emoji、強烈語氣詞比例當 arousal proxy。
 
-## 7. LSTM sequence 要做哪些
+## 8. LSTM sequence 要做哪些
 
-每部影片輸出：
+分類任務輸出：
 
 ```text
-data/processed/sequences/{video_id}.npy
+data/processed/sequences_3h/{video_id}.npy
 ```
 
 格式：
@@ -303,26 +383,43 @@ T = 0-3h 內的爬取點，約 18-36 steps
 features = [view_count, like_count, comment_count]
 ```
 
+回歸任務輸出：
+
+```text
+data/processed/sequences_7d/{sample_id}.npy
+```
+
+格式：
+
+```text
+shape = T x 3
+T = 該 7 天視窗內的爬取點
+features = [view_count, like_count, comment_count]
+```
+
 正規化：
 
-- 每部影片內，各維度除以該維度 0-3h 最大值。
+- 分類 sequence：每部影片內，各維度除以該維度 0-3h 最大值。
+- 回歸 sequence：每個 7 天 sample 內，各維度除以該維度在該視窗內最大值。
 - 最大值為 0 時該維度全設 0。
 
-## 8. 模型要做哪些
+## 9. 模型要做哪些
 
-### 8.1 Logistic Regression
+### 9.1 Logistic Regression
 
 - 表格 baseline
 - 類別欄位 one-hot
 - 也作 Stacking meta-learner
 
-### 8.2 LightGBM
+### 9.2 LightGBM
 
 - 表格主模型
 - 輸出 probability
 - 做 SHAP feature importance
+- 分類用 LightGBM Classifier
+- 回歸用 LightGBM Regressor
 
-### 8.3 LSTM
+### 9.3 LSTM
 
 ```text
 input = T x 3
@@ -331,7 +428,16 @@ loss = BCEWithLogitsLoss
 output = probability
 ```
 
-### 8.4 Stacking
+回歸版本：
+
+```text
+input = T x 3
+model = 2-layer LSTM + Dropout + Linear
+loss = MSELoss on log_next_day_views
+output = predicted_log_next_day_views
+```
+
+### 9.4 Stacking
 
 ```text
 LightGBM(tabular) -> P1
@@ -344,7 +450,7 @@ Stacking 注意：
 - meta-learner 只能用 validation / out-of-fold prediction。
 - 不能用 train in-sample prediction 訓練 meta-learner。
 
-## 9. 實驗要跑哪些
+## 10. 實驗要跑哪些
 
 資料切分：
 
@@ -353,6 +459,8 @@ train = 最早 70%
 valid = 中間 15%
 test  = 最晚 15%
 ```
+
+切分單位是 `video_id`，不是回歸用的 `sample_id`。同一支影片產生的所有 7 天回歸視窗必須留在同一個 split，不能同時出現在 train 和 test。
 
 特徵組：
 
@@ -368,6 +476,7 @@ test  = 最晚 15%
 
 - model name
 - label name
+- task type
 - feature group
 - train / valid / test size
 - positive rate
@@ -376,32 +485,42 @@ test  = 最晚 15%
 - Precision
 - Recall
 - PR-AUC
+- MAE
+- RMSE
+- RMSLE
+- R2
 
-## 10. 防資料洩漏規則
+## 11. 防資料洩漏規則
 
-- 3h 後的資料不能進 feature。
+- 分類任務：3h 後的資料不能進 feature。
 - `views_48h` 只能做 label。
+- 回歸任務：每筆樣本只能使用該 7 天視窗內的資料當 feature。
+- `target_end_views`、`next_day_views`、`log_next_day_views` 只能做 regression target。
 - 留言 feature 只能用 0-3h 內留言。
-- train / valid / test 依發布時間切。
+- train / valid / test 依影片發布時間切，且同一 `video_id` 的所有回歸樣本不能跨 split。
 - scaler、encoder、threshold 只能 fit train。
 - `is_high_growth_48h` 的 median 只能用 train 算。
 - Stacking 不能用 base model 的 train in-sample prediction。
 
-## 11. 最後要產出哪些檔案
+## 12. 最後要產出哪些檔案
 
 ```text
 data/processed/label_dataset.csv
 data/processed/tabular_features.csv
-data/processed/sequences/{video_id}.npy
+data/processed/regression_dataset.csv
+data/processed/regression_features_7d.csv
+data/processed/sequences_3h/{video_id}.npy
+data/processed/sequences_7d/{sample_id}.npy
 data/split/train.csv
 data/split/valid.csv
 data/split/test.csv
 results/metrics.csv
+results/regression_metrics.csv
 results/experiment_summary.csv
 results/feature_importance_shap.csv
 ```
 
-## 12. 實作模組
+## 13. 實作模組
 
 ```text
 src/crawler/
@@ -423,6 +542,7 @@ src/modeling/
   train_logistic.py
   train_lightgbm.py
   train_lstm.py
+  train_regression.py
   train_stacking.py
   evaluate.py
   shap_analysis.py
