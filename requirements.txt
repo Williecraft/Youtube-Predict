@@ -1,0 +1,25 @@
+# HTTP / scraping
+requests>=2.31.0
+selenium>=4.20.0
+
+# Data
+pandas>=2.0.0
+numpy>=1.26.0
+
+# ML
+scikit-learn>=1.4.0
+lightgbm>=4.3.0
+
+# Deep learning — choose one; both listed for flexibility
+torch>=2.2.0
+# tensorflow>=2.16.0
+
+# NLP / sentiment
+transformers>=4.40.0
+sentencepiece>=0.2.0
+
+# Explainability
+shap>=0.45.0
+
+# Utilities
+tqdm>=4.66.0

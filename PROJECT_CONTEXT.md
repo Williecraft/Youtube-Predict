@@ -22,9 +22,11 @@
 ```text
 data/
 ├── raw/
-│   ├── static/videos_static.json
-│   ├── timeseries/video_stats_all.csv
-│   └── comments/by_video/{video_id}.jsonl
+│   ├── static/
+│   │   ├── videos_static.json
+│   │   └── channel_static.json
+│   ├── timeseries/by_video/{video_id}.csv
+│   └── comments/by_video/{video_id}_t{1,2,3}h.jsonl
 ├── processed/
 │   ├── label_dataset.csv
 │   ├── tabular_features.csv
@@ -32,10 +34,11 @@ data/
 │   ├── regression_features_48h.csv
 │   ├── sequences_3h/{video_id}.npy
 │   └── sequences_48h/{sample_id}.npy
-└── split/
-    ├── train.csv
-    ├── valid.csv
-    └── test.csv
+├── split/
+│   ├── train.csv
+│   ├── valid.csv
+│   └── test.csv
+└── state.db                      # SQLite，多主機共用的爬蟲狀態
 
 src/
 ├── crawler/
@@ -47,25 +50,75 @@ models/
 results/
 ```
 
+設計重點：
+
+- `timeseries` 與 `comments` 一律 per-video 一檔，append-only，多主機輪流跑時用 rsync / git 合併不會打架。
+- `state.db` 紀錄影片追蹤狀態（哪些 video 還在追、上次抓到什麼時候、追蹤頻道清單等），跨機器只要把 `state.db` + `data/raw/` 一起搬就完整接手。
+- `videos_static.json` 是「id → 靜態欄位」的 dict 結構（單檔即可，靜態資料只寫一次）。`channel_static.json` 同理。
+
 ## 2. 爬蟲要做的事
+
+### 2.0 技術選型
+
+全部用 Python `requests`，不靠 YouTube Data API v3、也不靠 yt-dlp。每一種資料都按下面的階梯試，前面失敗才往後退：
+
+1. **InnerTube / 頁面內 JSON**：抓 watch / shorts / search / channel 頁回傳的 `ytInitialData`、`ytInitialPlayerResponse`，或直接 POST `https://www.youtube.com/youtubei/v1/{endpoint}` 取乾淨 JSON。最優先。
+2. **HTML scraping**：上面拿不到時改解析 HTML。
+3. **Selenium**：以上都失敗才用，會被擋的頁面（例如部分留言載入）才走這條。
+
+通用實作要求：
+
+- 統一 User-Agent、隨機延遲、429 / 5xx 退避（exponential backoff），重試上限 3。
+- 失敗的請求寫入 `state.db` 的 `crawl_errors` 表，可重試的之後排程重抓。
+- 所有時間欄位寫入時用 UTC ISO 8601 字串。
 
 ### 2.1 蒐集影片清單
 
-每筆至少要有：
+#### 來源與頻率
+
+| 來源 | 頻率 | 每次目標 | 備註 |
+|---|---|---|---|
+| `trending` 發燒影片 | 每 15 min | 抓**所有**當前發燒列表上的影片 | 多區合併：先納入 `TW`、`JP`、`US`、`KR`，同 `video_id` 去重；同一 id 再被看到只更新 `last_seen_at`，不重抓 static |
+| `search` 搜尋結果 | 每 1 hour | **x = 10** 部新影片/小時 | 從 §2.1.3 關鍵字產生器抽 5–7 個關鍵字，每個搜尋結果頁隨機挑 1–2 部尚未收錄、`age_at_discovery` 越小越優先的影片，湊滿 10 部即停 |
+| `channel` 追蹤頻道 | 每 1 hour | **y = 5** 部新影片/小時（上限） | 從 `channel_static.json` 隨機抽追蹤頻道，看 uploads 最近 3 部是否有未收錄的，沒有就抽下一個，直到湊滿 5 部或試完所有頻道；初期頻道少時實際遠少於 5 |
+
+不過濾 `age_at_discovery_minutes`：即使來不及拿到 0–3h 視窗，影片仍可進入回歸（48h 起算的滑動樣本）；只是這支影片不會出現在分類 dataset。
+
+#### 影片清單欄位
+
+每筆 entry 至少包含：
 
 - `video_id`
-- `source`
+- `source` ∈ {`trending`, `search`, `channel`}
+- `source_detail`（搜尋關鍵字、發燒區域＋排名、來源頻道 id）
 - `discovered_at`
+- `publish_time`（discovery 當下取得，沒拿到先空著之後補）
+- `age_at_discovery_minutes = discovered_at − publish_time`
+- `last_seen_at`
 
-來源可包含：
+存放：寫入 `state.db` 的 `videos` 表，不要為這個再建一個 CSV / JSON。
 
-- 發燒影片
-- 搜尋結果
-- 指定頻道近期影片
+#### 2.1.3 搜尋關鍵字產生器
+
+兩個來源混用，每次每小時搜尋取 70% 來自 (a)、30% 來自 (b)：
+
+**(a) 種子組合池**：人工準備分類欄位，每次隨機 1–3 個欄位拼接。範例欄位：
+
+```text
+{修飾詞} ∈ {最新, 2026, 推薦, 排行, 必看, 開箱, 精選, 爆笑, ...}
+{主題}   ∈ {美食, 旅遊, 遊戲, 電影, 動漫, 韓劇, 健身, 投資, AI, 寵物, 育兒, 時事, 科技, 音樂, ...}
+{形式}   ∈ {ft, ASMR, vlog, 短片, 教學, 實測, 評測, 反應, 排行榜, ""}
+```
+
+組合產生範例：「美食 vlog」、「2026 遊戲推薦」、「韓劇」、「AI 教學」、「開箱 科技」。
+
+**(b) Trending tags 動態抽**：每次跑爬蟲時，從最近 24h 發燒影片的 `tags` 欄位收集高頻 tag，從中隨機抽 1–2 個。
+
+**驗收條件**：實作前先單獨跑 50 次產生器、把生成的關鍵字列出來人工確認沒有亂碼、過於冷門、或語意奇怪的組合，OK 才接到主流程。
 
 ### 2.2 爬影片靜態資料
 
-輸出：`data/raw/static/videos_static.json`
+輸出：`data/raw/static/videos_static.json`，結構為 `{video_id: {...static fields...}}` 的單一 JSON dict。
 
 欄位：
 
@@ -77,8 +130,32 @@ results/
 | `publish_time` | 算相對時間窗 |
 | `duration_seconds` | 影片基本特徵 |
 | `category` | 類別特徵 |
+| `tags` | 給 §2.1.3 trending tag 抽樣用，同時算 `tag_count` |
 | `tag_count` | metadata / SEO 特徵 |
-| `is_shorts` | Shorts / 長影片分流 |
+| `is_shorts` | Shorts / 長影片分流，由 §2.3 結果填入 |
+| `static_fetched_at` | 抓取時間 |
+
+每支影片只抓一次靜態資料（除非 `is_shorts == unknown` 才會在判定成功時補回）。
+
+### 2.2.1 追蹤頻道與 channel_static.json
+
+任何被收錄的影片，其 `channel_id` 自動加入追蹤頻道清單。輸出：`data/raw/static/channel_static.json`，結構 `{channel_id: {...}}`。
+
+欄位：
+
+| 欄位 | 用途 |
+|---|---|
+| `channel_id` | key |
+| `channel_title` | 顯示 / debug |
+| `subscriber_count` | 訂閱數（最近一次抓到的） |
+| `subscriber_count_checked_at` | 訂閱數抓取時間 |
+| `country` | 可選 |
+| `discovered_at` | 加入追蹤的時間 |
+| `discovered_via_video_id` | 因哪部影片被追蹤 |
+| `last_checked_at` | 上次掃這個頻道的時間 |
+| `last_new_video_at` | 上次在這頻道發現新影片的時間 |
+
+注意 `subscriber_count` 是頻道級別、會持續更新；要算 label 用的 `subscriber_count_at_publish` 必須從**該影片**第一筆 timeseries 紀錄裡取，而不是從 channel_static 取最新值。
 
 ### 2.3 判定 Shorts
 
@@ -96,38 +173,50 @@ https://www.youtube.com/shorts/{video_id}
 | `303 See Other` | 長影片 |
 | 失敗 | `unknown`，之後重試 |
 
-保存：
+保存到 `videos_static.json` 的對應 entry：
 
 - `shorts_status_code`
 - `shorts_checked_at`
+- `is_shorts`
 
 ### 2.4 爬時序流量
 
-輸出：`data/raw/timeseries/video_stats_all.csv`
+輸出：`data/raw/timeseries/by_video/{video_id}.csv`，每支影片一個 CSV，append-only。
 
 欄位：
 
 | 欄位 | 用途 |
 |---|---|
 | `video_id` | join key |
-| `crawl_time` | 實際爬取時間 |
+| `crawl_time` | 實際爬取時間（UTC ISO 8601） |
 | `time_since_publish_minutes` | 對齊不同影片 |
 | `view_count` | label + LSTM |
 | `like_count` | LSTM + engagement |
 | `comment_count` | LSTM + engagement |
-| `subscriber_count` | 頻道規模校正 |
+| `subscriber_count` | 頻道規模校正、`subscriber_count_at_publish` 從第一筆取 |
 | `video_status` | 過濾不可用影片 |
 
-爬取頻率：
+#### 爬取排程
 
-- 0-3h：每 5-10 分鐘一次
-- 48h：至少一筆
-- 3-48h：可改成較低頻率，例如每 1-3 小時一次，用來建立回歸輸入序列
-- 72h：至少一筆，用來建立 48-72h 的回歸 target
+每支影片從 `discovered_at`（理想情況等於 `publish_time`）開始追蹤到 `publish_time + 168h`（7 天）為止。期間頻率：
+
+| 影片年齡 | 頻率 |
+|---|---|
+| 0 – 3 h | 每 5–10 min 一筆 |
+| 3 – 48 h | 每 1 h 一筆 |
+| 48 – 72 h | 每 1 h 一筆，且 48h、72h ±15 min 內必須各有一筆；找不到才於 preprocessing 用線性插補 |
+| 72 – 168 h | 每 6 h 一筆即可 |
+| > 168 h | 停止追蹤（如機器資源充足可調到 336h，由 `state.db` 的 `track_until` 欄位控制） |
+
+#### 排程實作要求
+
+- `state.db` 的 `videos` 表至少要有 `track_until`、`next_due_at`，scheduler 每次取 `next_due_at <= now AND track_until > now` 的影片來抓，更新成功後重排 `next_due_at`。
+- 爬蟲入口純 Python，可被 cron / Windows Task Scheduler / APScheduler 任一啟動，避免綁特定 OS。建議入口：`python -m src.crawler.run_scheduler`。
+- 多主機協作靠 `state.db` 的 SQLite WAL + 一個 `lease_until` 欄位（被某主機鎖住的影片在 lease 期限內不會被別台同時抓）。
 
 ### 2.5 爬留言
 
-輸出：`data/raw/comments/by_video/{video_id}.jsonl`
+輸出：`data/raw/comments/by_video/{video_id}_t{1,2,3}h.jsonl`，每支影片在 0–3h 內抓 **3 個 snapshot**，分別在 `publish_time + 1h`、`+ 2h`、`+ 3h`（容忍 ±10 min）。
 
 欄位：
 
@@ -135,12 +224,15 @@ https://www.youtube.com/shorts/{video_id}
 - `comment_id`
 - `comment_text`
 - `comment_like_count`
+- `comment_published_at`（如能拿到）
 - `crawl_time`
+- `snapshot_label` ∈ {`t1h`, `t2h`, `t3h`}
 
 規則：
 
-- 每部影片最多保留前 200 則熱門留言。
-- 建 feature 時只用 0-3h 內爬到的留言。
+- 每個 snapshot 各自抓 top 200 熱門留言（YouTube 預設 "Top comments" 排序）。
+- 建分類 feature 時用 `t3h` snapshot 為主，`t1h`、`t2h` 留作早期增長信號（例如 `comment_like_growth_t1h_to_t3h`）。
+- 已經錯過某個時間點（例如影片是 `age_at_discovery > 1h` 才被發現）就跳過該 snapshot，不補抓更早的；對應特徵變 NaN，由 preprocessing 處理。
 
 ## 3. 前處理要做的事
 
@@ -526,11 +618,16 @@ results/feature_importance_shap.csv
 
 ```text
 src/crawler/
-  collect_video_list.py
+  run_scheduler.py            # 主入口：依 state.db 排程觸發各 fetcher
+  keyword_generator.py        # §2.1.3 關鍵字產生器，需先單獨驗收
+  collect_video_list.py       # 三種來源（trending / search / channel）整合進 state.db
+  fetch_trending.py
+  fetch_search.py
+  fetch_channel_uploads.py
   detect_shorts.py
-  fetch_static.py
+  fetch_static.py             # 同時更新 channel_static.json
   fetch_timeseries.py
-  fetch_comments.py
+  fetch_comments.py           # 依 snapshot_label 三次
 
 src/preprocessing/
   clean_timeseries.py
@@ -553,4 +650,6 @@ src/utils/
   io.py
   time.py
   logging.py
+  state_db.py                 # SQLite schema、lease 機制、scheduler queue 操作
+  http_client.py              # requests session、退避、UA、redirect 控制
 ```
