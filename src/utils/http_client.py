@@ -28,6 +28,7 @@ _USER_AGENTS = [
 ]
 
 _INNERTUBE_BASE = "https://www.youtube.com/youtubei/v1"
+_INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 _INNERTUBE_CLIENT = {
     "clientName": "WEB",
     "clientVersion": "2.20240510.01.00",
@@ -37,6 +38,21 @@ _INNERTUBE_CLIENT = {
 
 # retry delays in seconds for each attempt after the first
 _RETRY_DELAYS = [3, 8, 20]
+
+# module-level stop flag; run_scheduler sets this to True to interrupt sleeps
+_stop = False
+
+
+def set_stop(val: bool = True):
+    global _stop
+    _stop = val
+
+
+def _sleep(seconds: float):
+    """Sleep in 0.5s chunks so Ctrl+C / _stop can interrupt."""
+    end = time.monotonic() + seconds
+    while not _stop and time.monotonic() < end:
+        time.sleep(min(0.5, end - time.monotonic()))
 
 
 class YouTubeClient:
@@ -55,14 +71,16 @@ class YouTubeClient:
 
     def get(self, url: str, params: dict | None = None, timeout: int = 20) -> requests.Response | None:
         for attempt, delay in enumerate([0] + _RETRY_DELAYS):
+            if _stop:
+                return None
             if delay:
-                time.sleep(delay + random.uniform(0, 2))
+                _sleep(delay + random.uniform(0, 2))
             try:
                 resp = self._session.get(url, params=params, timeout=timeout)
                 if resp.status_code == 429:
                     wait = 90 + random.uniform(0, 30)
                     logger.warning("429 on GET %s — backing off %.0fs", url, wait)
-                    time.sleep(wait)
+                    _sleep(wait)
                     continue
                 if resp.status_code >= 500:
                     logger.warning("HTTP %d GET %s (attempt %d/%d)", resp.status_code, url, attempt + 1, len(_RETRY_DELAYS) + 1)
@@ -84,25 +102,39 @@ class YouTubeClient:
 
     # ── InnerTube POST ─────────────────────────────────────────────────────
 
-    def post_innertube(self, endpoint: str, payload: dict, params: dict | None = None, timeout: int = 20) -> dict | None:
+    def post_innertube(
+        self,
+        endpoint: str,
+        payload: dict,
+        client_extra: dict | None = None,
+        timeout: int = 20,
+    ) -> dict | None:
+        """
+        client_extra: merged into the client context (e.g. {"gl": "JP"} for region).
+        """
         url = f"{_INNERTUBE_BASE}/{endpoint}"
-        body = {"context": {"client": _INNERTUBE_CLIENT}, **payload}
+        client = {**_INNERTUBE_CLIENT, **(client_extra or {})}
+        body = {"context": {"client": client}, **payload}
         headers = {
             "Content-Type": "application/json",
             "X-YouTube-Client-Name": "1",
-            "X-YouTube-Client-Version": _INNERTUBE_CLIENT["clientVersion"],
+            "X-YouTube-Client-Version": client["clientVersion"],
+            "X-Goog-Visitor-Id": "",
             "Origin": "https://www.youtube.com",
             "Referer": "https://www.youtube.com/",
         }
+        req_params = {"key": _INNERTUBE_API_KEY, "prettyPrint": "false"}
         for attempt, delay in enumerate([0] + _RETRY_DELAYS):
+            if _stop:
+                return None
             if delay:
-                time.sleep(delay + random.uniform(0, 2))
+                _sleep(delay + random.uniform(0, 2))
             try:
-                resp = self._session.post(url, json=body, headers=headers, params=params, timeout=timeout)
+                resp = self._session.post(url, json=body, headers=headers, params=req_params, timeout=timeout)
                 if resp.status_code == 429:
                     wait = 90 + random.uniform(0, 30)
                     logger.warning("429 innertube/%s — backing off %.0fs", endpoint, wait)
-                    time.sleep(wait)
+                    _sleep(wait)
                     continue
                 if resp.status_code >= 400:
                     logger.warning("HTTP %d innertube/%s (attempt %d)", resp.status_code, endpoint, attempt + 1)
@@ -124,7 +156,7 @@ class YouTubeClient:
         return extract_js_var(html, "ytInitialData"), extract_js_var(html, "ytInitialPlayerResponse")
 
     def jitter_sleep(self, min_s: float = 1.0, max_s: float = 3.0):
-        time.sleep(random.uniform(min_s, max_s))
+        _sleep(random.uniform(min_s, max_s))
 
 
 # ── HTML JSON extraction ────────────────────────────────────────────────────

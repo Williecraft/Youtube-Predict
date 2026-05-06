@@ -42,7 +42,7 @@ def _fetch_region(client: YouTubeClient, region: str) -> list[dict]:
     data = client.post_innertube(
         "browse",
         {"browseId": _TRENDING_BROWSE_ID},
-        params={"gl": region, "hl": "zh-TW"},
+        client_extra={"gl": region, "hl": "zh-TW"},
     )
     if data is None:
         # fallback: GET the trending page and parse ytInitialData

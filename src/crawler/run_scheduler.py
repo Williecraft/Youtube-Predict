@@ -35,7 +35,7 @@ from src.crawler.collect_video_list import (
 from src.crawler.fetch_comments import fetch_comments_snapshot
 from src.crawler.fetch_static import fetch_static
 from src.crawler.fetch_timeseries import fetch_timeseries_snapshot
-from src.utils.http_client import YouTubeClient
+from src.utils.http_client import YouTubeClient, set_stop as _http_set_stop
 from src.utils.logging import get_logger
 from src.utils.state_db import StateDB
 from src.utils.time import format_iso, now_utc, parse_iso
@@ -55,12 +55,19 @@ _TICK_S = 60
 logger = get_logger("crawler.scheduler", _LOG_DIR)
 
 _running = True
+_ctrl_c_count = 0
 
 
 def _signal_handler(sig, frame):
-    global _running
-    logger.info("Received signal %s — shutting down after current tick", sig)
-    _running = False
+    global _running, _ctrl_c_count
+    _ctrl_c_count += 1
+    if _ctrl_c_count == 1:
+        logger.info("Ctrl+C — finishing current task then stopping (press again to force quit)")
+        _running = False
+        _http_set_stop(True)   # interrupt any in-progress retry sleeps
+    else:
+        logger.info("Force quit.")
+        sys.exit(0)
 
 
 signal.signal(signal.SIGINT, _signal_handler)
@@ -120,7 +127,10 @@ def main():
         _run_comments(client, db)
 
         if _running:
-            time.sleep(_TICK_S)
+            # sleep in chunks so Ctrl+C responds within ~0.5s
+            end = time.monotonic() + _TICK_S
+            while _running and time.monotonic() < end:
+                time.sleep(0.5)
 
     logger.info("Scheduler stopped.")
 
