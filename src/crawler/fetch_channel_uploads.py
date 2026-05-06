@@ -1,6 +1,6 @@
 """
 爬取追蹤頻道最新上傳的影片。
-使用 InnerTube browse endpoint，browseId 為頻道的 uploads playlist（UC... → UU...）。
+來源：GET /channel/{id}/videos → ytInitialData
 """
 
 from __future__ import annotations
@@ -17,31 +17,18 @@ def fetch_channel_uploads(
     channel_id: str,
     max_results: int = 3,
 ) -> list[dict]:
-    """
-    Returns up to max_results recently uploaded video dicts:
-      video_id, title, channel_id, published_time_text, view_count_text
-    Sorted by upload recency (newest first, as returned by YouTube).
-    """
-    # UC{rest} → UU{rest}
-    playlist_id = "UU" + channel_id[2:] if channel_id.startswith("UC") else channel_id
-
-    data = client.post_innertube(
-        "browse",
-        {"browseId": playlist_id},
+    resp = client.get(
+        f"https://www.youtube.com/channel/{channel_id}/videos",
         params={"hl": "zh-TW"},
     )
+    if resp is None or resp.status_code != 200:
+        logger.warning("fetch_channel_uploads %s: GET failed (status=%s)", channel_id,
+                       resp.status_code if resp else "None")
+        return []
 
-    if data is None:
-        # fallback: channel /videos page
-        resp = client.get(
-            f"https://www.youtube.com/channel/{channel_id}/videos",
-            params={"hl": "zh-TW"},
-        )
-        if resp and resp.status_code == 200:
-            data = extract_js_var(resp.text, "ytInitialData")
-
+    data = extract_js_var(resp.text, "ytInitialData")
     if not data:
-        logger.warning("fetch_channel_uploads %s: no data", channel_id)
+        logger.warning("fetch_channel_uploads %s: ytInitialData not found", channel_id)
         return []
 
     results = _parse_uploads(data, channel_id)
@@ -52,34 +39,49 @@ def fetch_channel_uploads(
 def _parse_uploads(data: dict, channel_id: str) -> list[dict]:
     results = []
 
-    # playlist browse response
-    items = (
-        dig(data, "contents", "singleColumnBrowseResultsRenderer", "tabs", 0,
-            "tabRenderer", "content", "sectionListRenderer", "contents", 0,
-            "itemSectionRenderer", "contents", 0, "playlistVideoListRenderer", "contents")
-        or dig(data, "contents", "twoColumnBrowseResultsRenderer", "tabs", 0,
-               "tabRenderer", "content", "sectionListRenderer", "contents", 0,
-               "itemSectionRenderer", "contents", 0, "shelfRenderer", "content",
-               "horizontalListRenderer", "items")
-        or []
-    )
+    # videos tab → richGridRenderer or gridRenderer
+    tabs = dig(data, "contents", "twoColumnBrowseResultsRenderer", "tabs") or []
+    for tab in tabs:
+        tab_title = dig(tab, "tabRenderer", "title") or ""
+        if tab_title not in ("Videos", "影片", "動画", "동영상"):
+            continue
+        content = dig(tab, "tabRenderer", "content") or {}
 
-    for item in items:
-        vr = item.get("playlistVideoRenderer") or item.get("videoRenderer")
-        if not vr:
-            continue
-        video_id = vr.get("videoId")
-        if not video_id:
-            continue
-        title = dig(vr, "title", "runs", 0, "text") or dig(vr, "title", "simpleText") or ""
-        published_text = dig(vr, "publishedTimeText", "simpleText") or ""
-        view_text = dig(vr, "viewCountText", "simpleText") or ""
-        results.append({
-            "video_id": video_id,
-            "title": title,
-            "channel_id": channel_id,
-            "published_time_text": published_text,
-            "view_count_text": view_text,
-        })
+        # richGridRenderer (newer layout)
+        rich_items = dig(content, "richGridRenderer", "contents") or []
+        for item in rich_items:
+            vr = dig(item, "richItemRenderer", "content", "videoRenderer")
+            if vr:
+                v = _parse_video_renderer(vr, channel_id)
+                if v:
+                    results.append(v)
+
+        # sectionListRenderer → gridRenderer (older layout)
+        sections = dig(content, "sectionListRenderer", "contents") or []
+        for section in sections:
+            items = dig(section, "itemSectionRenderer", "contents", 0,
+                        "gridRenderer", "items") or []
+            for item in items:
+                vr = item.get("gridVideoRenderer") or item.get("videoRenderer")
+                if vr:
+                    v = _parse_video_renderer(vr, channel_id)
+                    if v:
+                        results.append(v)
 
     return results
+
+
+def _parse_video_renderer(renderer: dict, channel_id: str) -> dict | None:
+    video_id = renderer.get("videoId")
+    if not video_id:
+        return None
+    title = dig(renderer, "title", "runs", 0, "text") or dig(renderer, "title", "simpleText") or ""
+    published_text = dig(renderer, "publishedTimeText", "simpleText") or ""
+    view_text = dig(renderer, "viewCountText", "simpleText") or ""
+    return {
+        "video_id":            video_id,
+        "title":               title,
+        "channel_id":          channel_id,
+        "published_time_text": published_text,
+        "view_count_text":     view_text,
+    }
