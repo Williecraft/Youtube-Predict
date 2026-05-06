@@ -28,56 +28,12 @@ _USER_AGENTS = [
 ]
 
 _INNERTUBE_BASE = "https://www.youtube.com/youtubei/v1"
-
-# Fallback values; overwritten by _fetch_innertube_config() on first use.
-_INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 _INNERTUBE_CLIENT: dict = {
     "clientName": "WEB",
     "clientVersion": "2.20240510.01.00",
     "hl": "zh-TW",
     "gl": "TW",
 }
-_config_loaded = False
-
-
-def _fetch_innertube_config(session: requests.Session) -> None:
-    """
-    Pull the real API key and clientVersion from YouTube's homepage ytcfg block.
-    YouTube embeds something like:
-      ytcfg.set({"INNERTUBE_API_KEY":"AIzaSy...", "INNERTUBE_CLIENT_VERSION":"2.202..."})
-    This is far more reliable than hardcoding.
-    """
-    global _INNERTUBE_API_KEY, _INNERTUBE_CLIENT, _config_loaded
-    try:
-        resp = session.get("https://www.youtube.com/", timeout=15)
-        html = resp.text
-
-        import re
-        # extract the first ytcfg.set({...}) block
-        m = re.search(r'ytcfg\.set\s*\((\{.*?\})\)', html, re.DOTALL)
-        if not m:
-            logger.warning("_fetch_innertube_config: ytcfg.set not found, using fallbacks")
-            _config_loaded = True
-            return
-
-        cfg, _ = json.JSONDecoder().raw_decode(m.group(1))
-
-        key = cfg.get("INNERTUBE_API_KEY")
-        version = cfg.get("INNERTUBE_CLIENT_VERSION")
-        visitor_id = cfg.get("VISITOR_DATA", "")
-
-        if key:
-            _INNERTUBE_API_KEY = key
-        if version:
-            _INNERTUBE_CLIENT = {**_INNERTUBE_CLIENT, "clientVersion": version}
-        if visitor_id:
-            _INNERTUBE_CLIENT["visitorData"] = visitor_id
-
-        logger.info("InnerTube config loaded — version=%s key=%s…", version, (key or "")[:12])
-    except Exception as exc:
-        logger.warning("_fetch_innertube_config failed (%s), using fallbacks", exc)
-    finally:
-        _config_loaded = True
 
 # retry delays in seconds for each attempt after the first
 _RETRY_DELAYS = [3, 8, 20]
@@ -106,8 +62,6 @@ class YouTubeClient:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         })
         self._rotate_ua()
-        if not _config_loaded:
-            _fetch_innertube_config(self._session)
 
     def _rotate_ua(self):
         self._session.headers["User-Agent"] = random.choice(_USER_AGENTS)
@@ -164,11 +118,10 @@ class YouTubeClient:
             "Content-Type": "application/json",
             "X-YouTube-Client-Name": "1",
             "X-YouTube-Client-Version": client["clientVersion"],
-            "X-Goog-Visitor-Id": _INNERTUBE_CLIENT.get("visitorData", ""),
             "Origin": "https://www.youtube.com",
             "Referer": "https://www.youtube.com/",
         }
-        req_params = {"key": _INNERTUBE_API_KEY, "prettyPrint": "false"}
+        req_params = {"prettyPrint": "false"}
         for attempt, delay in enumerate([0] + _RETRY_DELAYS):
             if _stop:
                 return None
