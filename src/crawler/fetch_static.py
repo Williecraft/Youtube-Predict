@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 from src.crawler.detect_shorts import detect_shorts
+from src.crawler.fetch_timeseries import _parse_comment_count, _parse_subscriber_count
 from src.utils.http_client import YouTubeClient, dig, parse_count_text
 from src.utils.io import load_json_dict, save_json_dict
 from src.utils.time import format_iso, now_utc
@@ -52,14 +53,8 @@ def fetch_static(client: YouTubeClient, video_id: str, data_dir: Path) -> dict |
     publish_time = mf.get("publishDate") or mf.get("uploadDate")
     category     = mf.get("category", "")
 
-    # ── subscriber count from secondary info ──────────────────────────────
-    sub_text = dig(
-        init_data,
-        "contents", "twoColumnWatchNextResults", "results", "results",
-        "contents", 1, "videoSecondaryInfoRenderer",
-        "owner", "videoOwnerRenderer", "subscriberCountText", "simpleText",
-    )
-    subscriber_count = parse_count_text(sub_text)
+    subscriber_count = _parse_subscriber_count(init_data)
+    comment_count    = _parse_comment_count(init_data)
 
     # ── Shorts detection ──────────────────────────────────────────────────
     client.jitter_sleep(0.5, 1.5)
@@ -68,20 +63,22 @@ def fetch_static(client: YouTubeClient, video_id: str, data_dir: Path) -> dict |
 
     fetched_at = format_iso(now_utc())
     record = {
-        "video_id":            video_id,
-        "title":               title,
-        "title_length":        len(title),
-        "channel_id":          channel_id,
-        "publish_time":        publish_time,
-        "duration_seconds":    length_s,
-        "category":            category,
-        "tags":                tags,
-        "tag_count":           len(tags),
-        "is_shorts":           is_shorts,
-        "shorts_status_code":  shorts_code,
-        "shorts_checked_at":   fetched_at,
-        "video_status":        video_status,
-        "static_fetched_at":   fetched_at,
+        "video_id":                     video_id,
+        "title":                        title,
+        "title_length":                 len(title),
+        "channel_id":                   channel_id,
+        "publish_time":                 publish_time,
+        "duration_seconds":             length_s,
+        "category":                     category,
+        "tags":                         tags,
+        "tag_count":                    len(tags),
+        "is_shorts":                    is_shorts,
+        "shorts_status_code":           shorts_code,
+        "shorts_checked_at":            fetched_at,
+        "subscriber_count_at_fetch":    subscriber_count,
+        "comment_count_at_fetch":       comment_count,
+        "video_status":                 video_status,
+        "static_fetched_at":            fetched_at,
     }
 
     videos_static = load_json_dict(static_path)
