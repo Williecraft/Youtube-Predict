@@ -5,14 +5,15 @@
 ## 0. 固定設定
 
 ```text
-觀測窗：影片發布後 0-3 小時
+分類觀測窗：影片發布後 0-3 小時
+回歸觀測窗：影片發布後 0-48 小時
 主標籤：is_viral_48h
 主任務：binary classification，預測 is_viral_48h
-副任務：regression，用任意連續 7 天資料預測下一天新增觀看數 log_next_day_views
+副任務：regression，用發布後前 48 小時資料預測接下來 24 小時新增觀看數 log_next_24h_views
 切分：依 publish_time 做 train / valid / test，不隨機打散
 ```
 
-分類 feature 只能使用 0-3 小時內可取得的資料。回歸 feature 使用某個 7 天視窗內的資料，target 是該視窗後 1 天的新增觀看數。48h 資料只能用來做分類 label；回歸 target day 的資料不能進 feature。
+分類 feature 只能使用 0-3 小時內可取得的資料，48h 資料只用來建立分類 label。回歸 feature 只能使用 0-48 小時內可取得的資料，target 是 48-72 小時新增觀看數；48h 當下的累積觀看數可作為回歸 feature，但 48h 之後的資料不能進 feature。
 
 ## 1. 建立資料夾與檔案結構
 
@@ -28,9 +29,9 @@ data/
 │   ├── label_dataset.csv
 │   ├── tabular_features.csv
 │   ├── regression_dataset.csv
-│   ├── regression_features_7d.csv
+│   ├── regression_features_48h.csv
 │   ├── sequences_3h/{video_id}.npy
-│   └── sequences_7d/{sample_id}.npy
+│   └── sequences_48h/{sample_id}.npy
 └── split/
     ├── train.csv
     ├── valid.csv
@@ -121,7 +122,8 @@ https://www.youtube.com/shorts/{video_id}
 
 - 0-3h：每 5-10 分鐘一次
 - 48h：至少一筆
-- 之後每天至少一筆，用來建立回歸的 7 天滑動視窗
+- 3-48h：可改成較低頻率，例如每 1-3 小時一次，用來建立回歸輸入序列
+- 72h：至少一筆，用來建立 48-72h 的回歸 target
 
 ### 2.5 爬留言
 
@@ -150,9 +152,9 @@ https://www.youtube.com/shorts/{video_id}
 6. 少量缺值線性插補。
 7. 缺 0-3h 主要序列的影片排除。
 8. 分類資料缺 48h label 的影片排除。
-9. 回歸資料用每日累積觀看數建立 7 天滑動視窗樣本。
+9. 回歸資料缺 48h 輸入端點或 72h target 端點的影片排除。
 10. 建立 `log1p` 欄位，例如觀看數、訂閱數。
-11. 產出 `label_dataset.csv`、`tabular_features.csv`、`regression_dataset.csv`、`regression_features_7d.csv`、`sequences_3h/{video_id}.npy`、`sequences_7d/{sample_id}.npy`。
+11. 產出 `label_dataset.csv`、`tabular_features.csv`、`regression_dataset.csv`、`regression_features_48h.csv`、`sequences_3h/{video_id}.npy`、`sequences_48h/{sample_id}.npy`。
 
 ## 4. 爆紅標籤要怎麼做
 
@@ -239,45 +241,45 @@ is_high_growth_48h = growth_rate_48h >= median(growth_rate_48h on train)
 
 ## 5. 觀看數回歸副主題
 
-副主題：只要某支影片有連續 7 天中途資訊，就建立一筆回歸樣本，用這 7 天預測下一天新增觀看數。
+副主題：只要某支影片有發布後前 48 小時資訊與 72 小時端點，就建立一筆回歸樣本，用前 48 小時預測接下來 24 小時新增觀看數。
 
-每一筆回歸樣本不是一支影片，而是一個影片的 7 天視窗。
+每一筆回歸樣本對應一支影片的一個固定時間窗。
 
 ```text
-sample_id = {video_id}_{window_start_day}
-input window = [window_start_day, window_start_day + 7)
-target day = [window_start_day + 7, window_start_day + 8)
+sample_id = {video_id}_first48h
+input window = [publish_time, publish_time + 48h]
+target window = (publish_time + 48h, publish_time + 72h]
 ```
 
-不要直接預測 target day 結束時的累積觀看數，因為它會被視窗結束時的累積觀看數強烈支配。改預測下一天新增觀看數：
+不要直接預測 72h 的累積觀看數，因為它會被 48h 累積觀看數強烈支配。改預測 48-72h 的新增觀看數：
 
 ```text
-window_end_views = views at window_start_day + 7
-target_end_views = views at window_start_day + 8
-next_day_views = max(target_end_views - window_end_views, 0)
+views_48h = views at publish_time + 48h
+views_72h = views at publish_time + 72h
+next_24h_views = max(views_72h - views_48h, 0)
 
-regression_target = log_next_day_views = log1p(next_day_views)
-predicted_next_day_views = expm1(predicted_log_next_day_views)
+regression_target = log_next_24h_views = log1p(next_24h_views)
+predicted_next_24h_views = expm1(predicted_log_next_24h_views)
 ```
 
 回歸模型輸入：
 
-- 使用 `regression_features_7d.csv`
-- LSTM 使用 `sequences_7d/{sample_id}.npy`
-- 不可使用 `target_end_views` 或 `next_day_views` 當 feature
+- 使用 `regression_features_48h.csv`
+- LSTM 使用 `sequences_48h/{sample_id}.npy`
+- 不可使用 `views_72h` 或 `next_24h_views` 當 feature
 
 `regression_dataset.csv` 至少要有：
 
 - `sample_id`
 - `video_id`
-- `window_start_day`
-- `window_end_day`
-- `target_day`
-- `window_start_views`
-- `window_end_views`
-- `target_end_views`
-- `next_day_views`
-- `log_next_day_views`
+- `input_window_start_h`
+- `input_window_end_h`
+- `target_window_start_h`
+- `target_window_end_h`
+- `views_48h`
+- `views_72h`
+- `next_24h_views`
+- `log_next_24h_views`
 
 回歸模型要做：
 
@@ -386,21 +388,21 @@ features = [view_count, like_count, comment_count]
 回歸任務輸出：
 
 ```text
-data/processed/sequences_7d/{sample_id}.npy
+data/processed/sequences_48h/{sample_id}.npy
 ```
 
 格式：
 
 ```text
 shape = T x 3
-T = 該 7 天視窗內的爬取點
+T = 0-48h 內的爬取點
 features = [view_count, like_count, comment_count]
 ```
 
 正規化：
 
 - 分類 sequence：每部影片內，各維度除以該維度 0-3h 最大值。
-- 回歸 sequence：每個 7 天 sample 內，各維度除以該維度在該視窗內最大值。
+- 回歸 sequence：每個 48h sample 內，各維度除以該維度在該視窗內最大值。
 - 最大值為 0 時該維度全設 0。
 
 ## 9. 模型要做哪些
@@ -433,8 +435,8 @@ output = probability
 ```text
 input = T x 3
 model = 2-layer LSTM + Dropout + Linear
-loss = MSELoss on log_next_day_views
-output = predicted_log_next_day_views
+loss = MSELoss on log_next_24h_views
+output = predicted_log_next_24h_views
 ```
 
 ### 9.4 Stacking
@@ -460,7 +462,7 @@ valid = 中間 15%
 test  = 最晚 15%
 ```
 
-切分單位是 `video_id`，不是回歸用的 `sample_id`。同一支影片產生的所有 7 天回歸視窗必須留在同一個 split，不能同時出現在 train 和 test。
+切分單位是 `video_id`，不是回歸用的 `sample_id`。同一支影片的分類資料與回歸樣本必須留在同一個 split，不能同時出現在 train 和 test。
 
 特徵組：
 
@@ -493,9 +495,9 @@ test  = 最晚 15%
 ## 11. 防資料洩漏規則
 
 - 分類任務：3h 後的資料不能進 feature。
-- `views_48h` 只能做 label。
-- 回歸任務：每筆樣本只能使用該 7 天視窗內的資料當 feature。
-- `target_end_views`、`next_day_views`、`log_next_day_views` 只能做 regression target。
+- 分類任務中，`views_48h` 只能做 label。
+- 回歸任務：每筆樣本只能使用 0-48h 的資料當 feature。
+- `views_72h`、`next_24h_views`、`log_next_24h_views` 只能做 regression target。
 - 留言 feature 只能用 0-3h 內留言。
 - train / valid / test 依影片發布時間切，且同一 `video_id` 的所有回歸樣本不能跨 split。
 - scaler、encoder、threshold 只能 fit train。
@@ -508,9 +510,9 @@ test  = 最晚 15%
 data/processed/label_dataset.csv
 data/processed/tabular_features.csv
 data/processed/regression_dataset.csv
-data/processed/regression_features_7d.csv
+data/processed/regression_features_48h.csv
 data/processed/sequences_3h/{video_id}.npy
-data/processed/sequences_7d/{sample_id}.npy
+data/processed/sequences_48h/{sample_id}.npy
 data/split/train.csv
 data/split/valid.csv
 data/split/test.csv
