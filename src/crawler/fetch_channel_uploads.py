@@ -1,87 +1,60 @@
 """
 爬取追蹤頻道最新上傳的影片。
-來源：GET /channel/{id}/videos → ytInitialData
+來源：GET /feeds/videos.xml?channel_id={id}  (YouTube Atom RSS)
 """
 
 from __future__ import annotations
 
 import logging
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 
-from src.utils.http_client import YouTubeClient, dig, extract_js_var
+from src.utils.http_client import YouTubeClient
 
 logger = logging.getLogger(__name__)
+
+_NS = {
+    "atom": "http://www.w3.org/2005/Atom",
+    "yt":   "http://www.youtube.com/xml/schemas/2015",
+    "media":"http://search.yahoo.com/mrss/",
+}
+_RSS_URL = "https://www.youtube.com/feeds/videos.xml"
 
 
 def fetch_channel_uploads(
     client: YouTubeClient,
     channel_id: str,
-    max_results: int = 3,
+    max_results: int = 15,
 ) -> list[dict]:
-    resp = client.get(
-        f"https://www.youtube.com/channel/{channel_id}/videos",
-        params={"hl": "zh-TW"},
-    )
+    resp = client.get(_RSS_URL, params={"channel_id": channel_id})
     if resp is None or resp.status_code != 200:
         logger.warning("fetch_channel_uploads %s: GET failed (status=%s)", channel_id,
                        resp.status_code if resp else "None")
         return []
 
-    data = extract_js_var(resp.text, "ytInitialData")
-    if not data:
-        logger.warning("fetch_channel_uploads %s: ytInitialData not found", channel_id)
+    try:
+        root = ET.fromstring(resp.text)
+    except ET.ParseError as exc:
+        logger.warning("fetch_channel_uploads %s: XML parse error: %s", channel_id, exc)
         return []
 
-    results = _parse_uploads(data, channel_id)
-    logger.info("fetch_channel_uploads %s: %d videos found", channel_id, len(results))
-    return results[:max_results]
-
-
-def _parse_uploads(data: dict, channel_id: str) -> list[dict]:
     results = []
-
-    # videos tab → richGridRenderer or gridRenderer
-    tabs = dig(data, "contents", "twoColumnBrowseResultsRenderer", "tabs") or []
-    for tab in tabs:
-        tab_title = dig(tab, "tabRenderer", "title") or ""
-        if tab_title not in ("Videos", "影片", "動画", "동영상"):
+    for entry in root.findall("atom:entry", _NS)[:max_results]:
+        video_id = _text(entry, "yt:videoId")
+        if not video_id:
             continue
-        content = dig(tab, "tabRenderer", "content") or {}
+        results.append({
+            "video_id":            video_id,
+            "title":               _text(entry, "atom:title") or "",
+            "channel_id":          channel_id,
+            "published_time_text": _text(entry, "atom:published") or "",
+            "view_count_text":     "",
+        })
 
-        # richGridRenderer (newer layout)
-        rich_items = dig(content, "richGridRenderer", "contents") or []
-        for item in rich_items:
-            vr = dig(item, "richItemRenderer", "content", "videoRenderer")
-            if vr:
-                v = _parse_video_renderer(vr, channel_id)
-                if v:
-                    results.append(v)
-
-        # sectionListRenderer → gridRenderer (older layout)
-        sections = dig(content, "sectionListRenderer", "contents") or []
-        for section in sections:
-            items = dig(section, "itemSectionRenderer", "contents", 0,
-                        "gridRenderer", "items") or []
-            for item in items:
-                vr = item.get("gridVideoRenderer") or item.get("videoRenderer")
-                if vr:
-                    v = _parse_video_renderer(vr, channel_id)
-                    if v:
-                        results.append(v)
-
+    logger.info("fetch_channel_uploads %s: %d videos found", channel_id, len(results))
     return results
 
 
-def _parse_video_renderer(renderer: dict, channel_id: str) -> dict | None:
-    video_id = renderer.get("videoId")
-    if not video_id:
-        return None
-    title = dig(renderer, "title", "runs", 0, "text") or dig(renderer, "title", "simpleText") or ""
-    published_text = dig(renderer, "publishedTimeText", "simpleText") or ""
-    view_text = dig(renderer, "viewCountText", "simpleText") or ""
-    return {
-        "video_id":            video_id,
-        "title":               title,
-        "channel_id":          channel_id,
-        "published_time_text": published_text,
-        "view_count_text":     view_text,
-    }
+def _text(element, tag: str) -> str | None:
+    child = element.find(tag, _NS)
+    return child.text if child is not None else None

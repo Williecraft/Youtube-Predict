@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from src.utils.http_client import YouTubeClient, dig, parse_count_text
@@ -141,6 +142,12 @@ def _parse_subscriber_count(init_data: dict) -> int | None:
         secondary = _get_secondary_info(init_data)
         sub_text = dig(secondary, "owner", "videoOwnerRenderer",
                        "subscriberCountText", "simpleText")
-        return parse_count_text(sub_text)
+        if not sub_text:
+            return None
+        # Extract leading number + optional unit from text like "609萬位訂閱者" or "1.2M subscribers"
+        m = re.search(r"([\d,\.]+\s*[千萬億KkMmBb]?)", sub_text)
+        if m:
+            return parse_count_text(m.group(1).strip())
     except Exception:
-        return None
+        pass
+    return None

@@ -49,7 +49,7 @@ def _fetch_all_comments(client: YouTubeClient, video_id: str, max_comments: int)
     """Paginate through comments using continuation tokens."""
     comments: list[dict] = []
 
-    # First call: next endpoint to get initial comment token
+    # First call: get the panel content token for comments
     data = client.post_innertube("next", {"videoId": video_id})
     if not data:
         logger.warning("fetch_comments %s: next endpoint failed", video_id)
@@ -73,34 +73,42 @@ def _fetch_all_comments(client: YouTubeClient, video_id: str, max_comments: int)
         new_comments, continuation_token = _parse_comment_page(page_data)
         comments.extend(new_comments)
         page += 1
+        if not new_comments:
+            break  # avoid spinning on empty pages
 
     return comments[:max_comments]
 
 
 def _find_comments_continuation(data: dict) -> str | None:
     """Find the initial continuation token for comments from the next endpoint response."""
-    # Check engagementPanels for comment section
+    # Use the content section of the comments engagement panel (skip the header/sort-menu)
     for panel in data.get("engagementPanels") or []:
-        token = dig(
-            panel,
-            "engagementPanelSectionListRenderer", "content",
-            "sectionListRenderer", "contents", 0,
-            "itemSectionRenderer", "contents", 0,
-            "continuationItemRenderer", "continuationEndpoint",
-            "continuationCommand", "token",
-        )
+        renderer = panel.get("engagementPanelSectionListRenderer", {})
+        if "comment" not in renderer.get("panelIdentifier", "").lower():
+            continue
+        token = _find_any_continuation_token(renderer.get("content", {}))
         if token:
             return token
 
-    # Also check in the main contents
-    contents = dig(data, "contents", "twoColumnWatchNextResults",
-                   "results", "results", "contents") or []
-    for item in contents:
-        for sub in dig(item, "itemSectionRenderer", "contents") or []:
-            token = dig(sub, "continuationItemRenderer", "continuationEndpoint",
-                        "continuationCommand", "token")
-            if token:
-                return token
+    # Fallback: first continuation token anywhere in the response
+    return _find_any_continuation_token(data)
+
+
+def _find_any_continuation_token(obj, _depth: int = 0) -> str | None:
+    if _depth > 20 or not isinstance(obj, (dict, list)):
+        return None
+    if isinstance(obj, dict):
+        if "continuationCommand" in obj:
+            return obj["continuationCommand"].get("token")
+        for v in obj.values():
+            result = _find_any_continuation_token(v, _depth + 1)
+            if result:
+                return result
+    else:
+        for item in obj:
+            result = _find_any_continuation_token(item, _depth + 1)
+            if result:
+                return result
     return None
 
 
@@ -134,6 +142,20 @@ def _parse_comment_page(data: dict) -> tuple[list[dict], str | None]:
 
 
 def _parse_comment_thread(renderer: dict) -> dict | None:
+    # New YouTube ViewModel format (2024+)
+    cvm = dig(renderer, "commentViewModel", "commentViewModel")
+    if cvm:
+        comment_id = cvm.get("commentId")
+        if not comment_id:
+            return None
+        return {
+            "comment_id": comment_id,
+            "comment_text": "",  # text not exposed in ViewModel format
+            "comment_like_count": 0,
+            "comment_published_at": "",
+        }
+
+    # Legacy commentRenderer format
     comment = dig(renderer, "comment", "commentRenderer")
     if not comment:
         return None

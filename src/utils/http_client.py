@@ -60,7 +60,11 @@ class YouTubeClient:
         self._session.headers.update({
             "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Upgrade-Insecure-Requests": "1",
         })
+        # Bypass YouTube consent / GDPR gate
+        self._session.cookies.set("SOCS", "CAI", domain=".youtube.com")
         self._rotate_ua()
 
     def _rotate_ua(self):

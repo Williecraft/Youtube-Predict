@@ -49,46 +49,29 @@ def _fetch_region(client: YouTubeClient, region: str) -> list[dict]:
 
 
 def _parse_trending(data: dict, region: str) -> list[dict]:
-    results: list[dict] = []
-    for section in _collect_sections(data):
-        for renderer in _iter_video_renderers(section):
-            v = _parse_video_renderer(renderer, region)
-            if v:
-                results.append(v)
+    results = []
+    seen: set[str] = set()
+    for renderer in _find_video_renderers(data):
+        v = _parse_video_renderer(renderer, region)
+        if v and v["video_id"] not in seen:
+            seen.add(v["video_id"])
+            results.append(v)
     return results
 
 
-def _collect_sections(data: dict) -> list[dict]:
-    sections = []
-    tabs = dig(data, "contents", "twoColumnBrowseResultsRenderer", "tabs") or []
-    for tab in tabs:
-        sl = dig(tab, "tabRenderer", "content", "sectionListRenderer") or {}
-        sections.extend(sl.get("contents", []))
-    rich = dig(data, "contents", "twoColumnBrowseResultsRenderer", "tabs", 0,
-               "tabRenderer", "content", "richGridRenderer", "contents") or []
-    sections.extend(rich)
-    return sections
-
-
-def _iter_video_renderers(section: dict):
-    for key in ("itemSectionRenderer", "shelfRenderer", "richItemRenderer"):
-        inner = section.get(key, {})
-        if not inner:
-            continue
-        if "content" in inner:
-            vr = inner["content"].get("videoRenderer")
-            if vr:
-                yield vr
-        for item in inner.get("contents", []):
-            shelf = item.get("shelfRenderer", {})
-            expanded = shelf.get("content", {}).get("expandedShelfContentsRenderer", {})
-            for shelf_item in expanded.get("items", []):
-                vr = shelf_item.get("videoRenderer")
-                if vr:
-                    yield vr
-            vr = item.get("videoRenderer")
-            if vr:
-                yield vr
+def _find_video_renderers(obj, _depth=0):
+    """Recursively find all videoRenderer dicts regardless of page layout."""
+    if _depth > 25 or not isinstance(obj, (dict, list)):
+        return
+    if isinstance(obj, dict):
+        if "videoId" in obj and "title" in obj:
+            yield obj
+            return
+        for v in obj.values():
+            yield from _find_video_renderers(v, _depth + 1)
+    else:
+        for item in obj:
+            yield from _find_video_renderers(item, _depth + 1)
 
 
 def _parse_video_renderer(renderer: dict, region: str) -> dict | None:
@@ -96,11 +79,11 @@ def _parse_video_renderer(renderer: dict, region: str) -> dict | None:
     if not video_id:
         return None
     return {
-        "video_id":           video_id,
-        "title":              dig(renderer, "title", "runs", 0, "text") or dig(renderer, "title", "simpleText") or "",
-        "channel_id":         dig(renderer, "ownerText", "runs", 0, "navigationEndpoint", "browseEndpoint", "browseId") or "",
-        "channel_title":      dig(renderer, "ownerText", "runs", 0, "text") or "",
-        "region":             region,
-        "view_count_text":    dig(renderer, "viewCountText", "simpleText") or "",
+        "video_id":            video_id,
+        "title":               dig(renderer, "title", "runs", 0, "text") or dig(renderer, "title", "simpleText") or "",
+        "channel_id":          dig(renderer, "ownerText", "runs", 0, "navigationEndpoint", "browseEndpoint", "browseId") or "",
+        "channel_title":       dig(renderer, "ownerText", "runs", 0, "text") or "",
+        "region":              region,
+        "view_count_text":     dig(renderer, "viewCountText", "simpleText") or "",
         "published_time_text": dig(renderer, "publishedTimeText", "simpleText") or "",
     }
