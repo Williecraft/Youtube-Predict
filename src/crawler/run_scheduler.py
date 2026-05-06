@@ -36,7 +36,7 @@ from src.crawler.fetch_comments import fetch_comments_snapshot
 from src.crawler.fetch_static import fetch_static
 from src.crawler.fetch_timeseries import fetch_timeseries_snapshot
 from src.utils.http_client import YouTubeClient, set_stop as _http_set_stop
-from src.utils.logging import get_logger
+from src.utils.logging import get_logger, setup_file_logging, summary
 from src.utils.state_db import StateDB
 from src.utils.time import format_iso, now_utc, parse_iso
 
@@ -52,7 +52,8 @@ _INTERVAL_SEARCH_S = 60 * 60
 _INTERVAL_CHANNEL_S = 60 * 60
 _TICK_S = 60
 
-logger = get_logger("crawler.scheduler", _LOG_DIR)
+setup_file_logging(_LOG_DIR)
+logger = get_logger("crawler.scheduler")
 
 _running = True
 _ctrl_c_count = 0
@@ -62,11 +63,11 @@ def _signal_handler(sig, frame):
     global _running, _ctrl_c_count
     _ctrl_c_count += 1
     if _ctrl_c_count == 1:
-        logger.info("Ctrl+C — finishing current task then stopping (press again to force quit)")
+        summary.info("Ctrl+C — stopping after current task (press again to force quit)")
         _running = False
-        _http_set_stop(True)   # interrupt any in-progress retry sleeps
+        _http_set_stop(True)
     else:
-        logger.info("Force quit.")
+        summary.info("Force quit.")
         sys.exit(0)
 
 
@@ -84,7 +85,7 @@ def _ts_to_epoch(iso: str | None) -> float:
 
 
 def main():
-    logger.info("Scheduler starting — data_dir=%s db=%s", _DATA_DIR, _DB_PATH)
+    summary.info("Scheduler starting — data_dir=%s", _DATA_DIR)
     client = YouTubeClient()
     db = StateDB(_DB_PATH)
 
@@ -97,27 +98,33 @@ def main():
                 n = collect_trending(client, db)
                 db.job_mark_ran("trending")
                 db.log_event("trending", "ok", f"found {n} new videos")
+                summary.info("[trending] +%d new videos", n)
             except Exception as exc:
                 logger.exception("collect_trending error: %s", exc)
                 db.log_event("trending", "fail", str(exc))
+                summary.warning("[trending] ERROR: %s", exc)
 
         if now_ts - db.job_last_run("search") >= _INTERVAL_SEARCH_S:
             try:
                 n = collect_from_search(client, db, _DATA_DIR)
                 db.job_mark_ran("search")
                 db.log_event("search", "ok", f"found {n} new videos")
+                summary.info("[search] +%d new videos", n)
             except Exception as exc:
                 logger.exception("collect_from_search error: %s", exc)
                 db.log_event("search", "fail", str(exc))
+                summary.warning("[search] ERROR: %s", exc)
 
         if now_ts - db.job_last_run("channel") >= _INTERVAL_CHANNEL_S:
             try:
                 n = collect_from_channels(client, db)
                 db.job_mark_ran("channel")
                 db.log_event("channel", "ok", f"found {n} new videos")
+                summary.info("[channel] +%d new videos", n)
             except Exception as exc:
                 logger.exception("collect_from_channels error: %s", exc)
                 db.log_event("channel", "fail", str(exc))
+                summary.warning("[channel] ERROR: %s", exc)
 
         # ── static fetch for new videos ────────────────────────────────────
         _run_static_fetches(client, db)
@@ -134,15 +141,16 @@ def main():
             while _running and time.monotonic() < end:
                 time.sleep(0.5)
 
-    logger.info("Scheduler stopped.")
+    summary.info("Scheduler stopped.")
 
 
 def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 5):
-    """Fetch static data for videos that haven't been fetched yet."""
     with db._conn() as conn:
         rows = conn.execute(
             "SELECT video_id FROM videos WHERE static_fetched=0 LIMIT ?", (batch,)
         ).fetchall()
+    if rows:
+        summary.info("[static] fetching %d pending videos", len(rows))
 
     for row in rows:
         video_id = row["video_id"]
