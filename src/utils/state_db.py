@@ -6,6 +6,8 @@ Schema
 videos          - one row per video_id; tracks crawl progress and scheduling
 channels        - tracked channels discovered from collected videos
 crawl_errors    - failed tasks for later retry
+scheduler_jobs  - last_run_at per named job; survives restarts
+crawl_log       - human-readable record of every major crawl event
 
 Multi-host safety
 -----------------
@@ -76,6 +78,22 @@ CREATE TABLE IF NOT EXISTS crawl_errors (
     error_msg   TEXT,
     failed_at   TEXT,
     retry_after TEXT
+);
+
+CREATE TABLE IF NOT EXISTS scheduler_jobs (
+    job_name    TEXT PRIMARY KEY,
+    last_run_at TEXT,           -- UTC ISO 8601；NULL = 從未跑過
+    last_host   TEXT            -- 哪台主機跑的
+);
+
+CREATE TABLE IF NOT EXISTS crawl_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_time  TEXT,           -- UTC ISO 8601
+    host        TEXT,
+    job_name    TEXT,           -- e.g. "trending", "search", "timeseries", "static"
+    video_id    TEXT,           -- NULL for job-level events
+    status      TEXT,           -- "ok" / "fail" / "skip"
+    detail      TEXT            -- 簡短說明，e.g. "found 42 videos" / error message
 );
 """
 
@@ -267,6 +285,49 @@ class StateDB:
 
     def release_lease(self, video_id: str):
         self.update_video(video_id, lease_until=None, lease_by=None)
+
+    # ── scheduler job timing (survives restarts) ───────────────────────────
+
+    def job_last_run(self, job_name: str) -> float:
+        """Return the last run time of a job as a Unix timestamp (0 if never run)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT last_run_at FROM scheduler_jobs WHERE job_name=?", (job_name,)
+            ).fetchone()
+        if row and row["last_run_at"]:
+            try:
+                return parse_iso(row["last_run_at"]).timestamp()
+            except Exception:
+                pass
+        return 0.0
+
+    def job_mark_ran(self, job_name: str):
+        """Record that a job just finished successfully."""
+        now_s = format_iso(now_utc())
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO scheduler_jobs (job_name, last_run_at, last_host)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(job_name) DO UPDATE SET last_run_at=excluded.last_run_at,
+                                                       last_host=excluded.last_host""",
+                (job_name, now_s, _HOST_ID),
+            )
+
+    # ── crawl log ──────────────────────────────────────────────────────────
+
+    def log_event(
+        self,
+        job_name: str,
+        status: str,
+        detail: str = "",
+        video_id: str | None = None,
+    ):
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO crawl_log (event_time, host, job_name, video_id, status, detail)
+                   VALUES (?,?,?,?,?,?)""",
+                (format_iso(now_utc()), _HOST_ID, job_name, video_id, status, detail),
+            )
 
     # ── errors ─────────────────────────────────────────────────────────────
 

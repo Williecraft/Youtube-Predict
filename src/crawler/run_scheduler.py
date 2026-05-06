@@ -88,34 +88,36 @@ def main():
     client = YouTubeClient()
     db = StateDB(_DB_PATH)
 
-    last_trending = 0.0
-    last_search = 0.0
-    last_channel = 0.0
-
     while _running:
         now_ts = time.time()
 
         # ── discovery ──────────────────────────────────────────────────────
-        if now_ts - last_trending >= _INTERVAL_TRENDING_S:
+        if now_ts - db.job_last_run("trending") >= _INTERVAL_TRENDING_S:
             try:
-                collect_trending(client, db)
+                n = collect_trending(client, db)
+                db.job_mark_ran("trending")
+                db.log_event("trending", "ok", f"found {n} new videos")
             except Exception as exc:
                 logger.exception("collect_trending error: %s", exc)
-            last_trending = now_ts
+                db.log_event("trending", "fail", str(exc))
 
-        if now_ts - last_search >= _INTERVAL_SEARCH_S:
+        if now_ts - db.job_last_run("search") >= _INTERVAL_SEARCH_S:
             try:
-                collect_from_search(client, db, _DATA_DIR)
+                n = collect_from_search(client, db, _DATA_DIR)
+                db.job_mark_ran("search")
+                db.log_event("search", "ok", f"found {n} new videos")
             except Exception as exc:
                 logger.exception("collect_from_search error: %s", exc)
-            last_search = now_ts
+                db.log_event("search", "fail", str(exc))
 
-        if now_ts - last_channel >= _INTERVAL_CHANNEL_S:
+        if now_ts - db.job_last_run("channel") >= _INTERVAL_CHANNEL_S:
             try:
-                collect_from_channels(client, db)
+                n = collect_from_channels(client, db)
+                db.job_mark_ran("channel")
+                db.log_event("channel", "ok", f"found {n} new videos")
             except Exception as exc:
                 logger.exception("collect_from_channels error: %s", exc)
-            last_channel = now_ts
+                db.log_event("channel", "fail", str(exc))
 
         # ── static fetch for new videos ────────────────────────────────────
         _run_static_fetches(client, db)
@@ -154,11 +156,14 @@ def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 5):
                 if publish_time:
                     db.set_publish_time(video_id, publish_time)
                     db.schedule_next_timeseries(video_id, publish_time)
+                db.log_event("static", "ok", result.get("video_status", ""), video_id)
             else:
                 db.log_error(video_id, "fetch_static", "returned None")
+                db.log_event("static", "fail", "returned None", video_id)
         except Exception as exc:
             logger.exception("fetch_static %s error: %s", video_id, exc)
             db.log_error(video_id, "fetch_static", str(exc))
+            db.log_event("static", "fail", str(exc), video_id)
         finally:
             db.release_lease(video_id)
         client.jitter_sleep(1.5, 3.0)
@@ -176,17 +181,21 @@ def _run_timeseries(client: YouTubeClient, db: StateDB, batch: int = 20):
             if result:
                 video_status = result.get("video_status", "")
                 if video_status in ("LOGIN_REQUIRED", "ERROR", "UNPLAYABLE"):
-                    # stop tracking unavailable videos
                     db.update_video(video_id, track_until=format_iso(now_utc()))
                     logger.info("stopping %s — status=%s", video_id, video_status)
+                    db.log_event("timeseries", "skip", f"stopped: {video_status}", video_id)
                 else:
                     db.schedule_next_timeseries(video_id, publish_time or "")
+                    db.log_event("timeseries", "ok",
+                                 f"views={result.get('view_count')}", video_id)
             else:
                 db.log_error(video_id, "fetch_timeseries", "returned None")
+                db.log_event("timeseries", "fail", "returned None", video_id)
                 db.schedule_next_timeseries(video_id, publish_time or "")
         except Exception as exc:
             logger.exception("fetch_timeseries %s error: %s", video_id, exc)
             db.log_error(video_id, "fetch_timeseries", str(exc))
+            db.log_event("timeseries", "fail", str(exc), video_id)
         finally:
             db.release_lease(video_id)
         client.jitter_sleep(1.0, 2.5)
@@ -227,9 +236,11 @@ def _run_comments(client: YouTubeClient, db: StateDB):
                 n = fetch_comments_snapshot(client, video_id, label, _DATA_DIR)
                 db.mark_comment_done(video_id, label, done=True)
                 logger.info("comments %s [%s]: %d saved", video_id, label, n)
+                db.log_event("comments", "ok", f"{label}: {n} saved", video_id)
             except Exception as exc:
                 logger.exception("fetch_comments %s [%s] error: %s", video_id, label, exc)
                 db.log_error(video_id, f"fetch_comments_{label}", str(exc))
+                db.log_event("comments", "fail", f"{label}: {exc}", video_id)
             finally:
                 db.release_lease(video_id)
             client.jitter_sleep(2.0, 4.0)
