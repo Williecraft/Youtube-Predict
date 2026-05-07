@@ -46,30 +46,20 @@ def check(name, fn):
         return None
 
 
-# ── 1. trending ────────────────────────────────────────────────────────────
-print("\n[1] fetch_trending (TW only)")
-from src.crawler.fetch_trending import fetch_trending, _fetch_region
-from src.utils.http_client import extract_js_var
+# ── 1. explore ─────────────────────────────────────────────────────────────
+print("\n[1] fetch_explore (TW/gaming only)")
+from src.crawler.fetch_explore import fetch_explore, _fetch_category
 
-# 先看 GET 能不能拿到頁面
-resp = client.get("https://www.youtube.com/feed/trending", params={"gl": "TW", "hl": "zh-TW"})
-got_page = resp is not None and resp.status_code == 200
-print(f"  {'✓' if got_page else '✗'}  GET /feed/trending status={resp.status_code if resp else 'None'}")
-
-if got_page:
-    data = extract_js_var(resp.text, "ytInitialData")
-    has_data = bool(data)
-    print(f"  {'✓' if has_data else '✗'}  ytInitialData 解析{'成功' if has_data else '失敗（頁面結構可能改變）'}")
-
-trending = check("trending 至少拿到 1 部影片", lambda: fetch_trending(client, regions=["TW"]))
+explore = check("explore 至少拿到 1 部影片",
+                lambda: _fetch_category(client, "https://www.youtube.com/gaming", "gaming", "TW"))
 test_video_id   = _FALLBACK_VIDEO_ID
 test_channel_id = _FALLBACK_CHANNEL_ID
-if trending:
-    test_video_id   = trending[0]["video_id"]
-    test_channel_id = trending[0].get("channel_id") or _FALLBACK_CHANNEL_ID
-    print(f"       ↳ 共 {len(trending)} 部，測試用 video_id={test_video_id}")
+if explore:
+    test_video_id   = explore[0]["video_id"]
+    test_channel_id = explore[0].get("channel_id") or _FALLBACK_CHANNEL_ID
+    print(f"       ↳ 共 {len(explore)} 部，測試用 video_id={test_video_id}")
 else:
-    print(f"       ↳ trending 失敗，用 fallback video_id={test_video_id}")
+    print(f"       ↳ explore 失敗，用 fallback video_id={test_video_id}")
 
 # ── 2. search ──────────────────────────────────────────────────────────────
 print("\n[2] fetch_search")
@@ -123,11 +113,12 @@ if ts:
         print(f"       {tag} {field} = {val!r}")
 
 # ── 7. fetch_comments ──────────────────────────────────────────────────────
+# 固定用 fallback 影片（已知有留言），探索影片可能太新或留言停用
 print("\n[7] fetch_comments")
 from src.crawler.fetch_comments import fetch_comments_snapshot
 
-n = check(f"fetch_comments {test_video_id} [t1h] 至少 1 則",
-          lambda: fetch_comments_snapshot(client, test_video_id, "t1h", DATA_DIR, max_comments=10))
+n = check(f"fetch_comments {_FALLBACK_VIDEO_ID} [t1h] 至少 1 則",
+          lambda: fetch_comments_snapshot(client, _FALLBACK_VIDEO_ID, "t1h", DATA_DIR, max_comments=10))
 if n:
     print(f"       ↳ 抓到 {n} 則留言")
 

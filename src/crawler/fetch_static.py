@@ -30,7 +30,12 @@ def _parse_iso_duration(s: str | None) -> int | None:
     return h * 3600 + mn * 60 + sc
 
 
-def fetch_static(client: YouTubeClient, video_id: str, data_dir: Path) -> dict | None:
+def fetch_static(
+    client: YouTubeClient,
+    video_id: str,
+    data_dir: Path,
+    discovery_source: str = "",
+) -> dict | None:
     static_path = data_dir / "raw" / "static" / "videos_static.json"
     channel_path = data_dir / "raw" / "static" / "channel_static.json"
 
@@ -78,6 +83,7 @@ def fetch_static(client: YouTubeClient, video_id: str, data_dir: Path) -> dict |
         "subscriber_count_at_fetch":    subscriber_count,
         "comment_count_at_fetch":       comment_count,
         "video_status":                 video_status,
+        "discovery_source":             discovery_source,
         "static_fetched_at":            fetched_at,
     }
 

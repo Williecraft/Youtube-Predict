@@ -28,9 +28,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.crawler.collect_video_list import (
+    collect_explore,
     collect_from_channels,
     collect_from_search,
-    collect_trending,
 )
 from src.crawler.fetch_comments import fetch_comments_snapshot
 from src.crawler.fetch_static import fetch_static
@@ -93,16 +93,16 @@ def main():
         now_ts = time.time()
 
         # ── discovery ──────────────────────────────────────────────────────
-        if now_ts - db.job_last_run("trending") >= _INTERVAL_TRENDING_S:
+        if now_ts - db.job_last_run("explore") >= _INTERVAL_TRENDING_S:
             try:
-                n = collect_trending(client, db)
-                db.job_mark_ran("trending")
-                db.log_event("trending", "ok", f"found {n} new videos")
-                summary.info("[trending] +%d new videos", n)
+                n = collect_explore(client, db)
+                db.job_mark_ran("explore")
+                db.log_event("explore", "ok", f"found {n} new videos")
+                summary.info("[explore] +%d new videos", n)
             except Exception as exc:
-                logger.exception("collect_trending error: %s", exc)
-                db.log_event("trending", "fail", str(exc))
-                summary.warning("[trending] ERROR: %s", exc)
+                logger.exception("collect_explore error: %s", exc)
+                db.log_event("explore", "fail", str(exc))
+                summary.warning("[explore] ERROR: %s", exc)
 
         if now_ts - db.job_last_run("search") >= _INTERVAL_SEARCH_S:
             try:
@@ -147,17 +147,18 @@ def main():
 def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 5):
     with db._conn() as conn:
         rows = conn.execute(
-            "SELECT video_id FROM videos WHERE static_fetched=0 LIMIT ?", (batch,)
+            "SELECT video_id, source FROM videos WHERE static_fetched=0 LIMIT ?", (batch,)
         ).fetchall()
     if rows:
         summary.info("[static] fetching %d pending videos", len(rows))
 
     for row in rows:
         video_id = row["video_id"]
+        discovery_source = row["source"] or ""
         if not db.acquire_lease(video_id, seconds=120):
             continue
         try:
-            result = fetch_static(client, video_id, _DATA_DIR)
+            result = fetch_static(client, video_id, _DATA_DIR, discovery_source)
             if result:
                 publish_time = result.get("publish_time")
                 db.update_video(video_id, static_fetched=1)

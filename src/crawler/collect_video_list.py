@@ -13,8 +13,8 @@ import random
 from pathlib import Path
 
 from src.crawler.fetch_channel_uploads import fetch_channel_uploads
+from src.crawler.fetch_explore import fetch_explore
 from src.crawler.fetch_search import fetch_search
-from src.crawler.fetch_trending import fetch_trending
 from src.crawler.keyword_generator import generate_keywords, _load_trending_tags
 from src.utils.http_client import YouTubeClient
 from src.utils.io import load_json_dict
@@ -28,22 +28,21 @@ _SEARCH_TARGET_PER_HOUR = 10    # target new videos from search
 _CHANNEL_TARGET_PER_HOUR = 5    # target new videos from channels
 
 
-def collect_trending(client: YouTubeClient, db: StateDB) -> int:
-    """Fetch all trending videos (multi-region) and register new ones. Returns count of new videos."""
+def collect_explore(client: YouTubeClient, db: StateDB) -> int:
+    """Fetch videos from YouTube Explore categories (multi-region) and register new ones."""
     now = format_iso(now_utc())
-    videos = fetch_trending(client)
+    videos = fetch_explore(client)
     new_count = 0
     for v in videos:
         added = db.add_video(
             video_id=v["video_id"],
-            source="trending",
-            source_detail=v.get("region", ""),
+            source="explore",
+            source_detail=f"{v.get('region','')}/{v.get('category','')}",
             discovered_at=now,
         )
         if added:
             new_count += 1
-            logger.info("new trending video: %s (%s)", v["video_id"], v.get("title", "")[:50])
-        # always register channel
+            logger.info("new explore video: %s (%s)", v["video_id"], v.get("title", "")[:50])
         if v.get("channel_id"):
             db.upsert_channel(
                 v["channel_id"],
@@ -51,7 +50,7 @@ def collect_trending(client: YouTubeClient, db: StateDB) -> int:
                 discovered_at=now,
                 discovered_via_video_id=v["video_id"],
             )
-    logger.info("collect_trending: %d total, %d new", len(videos), new_count)
+    logger.info("collect_explore: %d total, %d new", len(videos), new_count)
     return new_count
 
 
