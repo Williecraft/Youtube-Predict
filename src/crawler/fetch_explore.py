@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import logging
+import random
 
 from src.utils.http_client import YouTubeClient, dig, extract_js_var
 
@@ -37,15 +38,17 @@ _EXPLORE_PAGES: list[tuple[str, str]] = [
 def fetch_explore(
     client: YouTubeClient,
     regions: list[str] = _REGIONS,
+    max_per_category: int = 0,
 ) -> list[dict]:
     """
-    Scrape all explore category pages for each region.
+    Scrape explore category pages for each region.
+    max_per_category: cap per (region, category) pair; 0 = no cap.
     Returns deduplicated list of video dicts.
     """
     seen: dict[str, dict] = {}
     for region in regions:
         for category, url in _EXPLORE_PAGES:
-            videos = _fetch_category(client, url, category, region)
+            videos = _fetch_category(client, url, category, region, max_per_category)
             for v in videos:
                 vid = v["video_id"]
                 if vid not in seen:
@@ -56,7 +59,13 @@ def fetch_explore(
     return list(seen.values())
 
 
-def _fetch_category(client: YouTubeClient, url: str, category: str, region: str) -> list[dict]:
+def _fetch_category(
+    client: YouTubeClient,
+    url: str,
+    category: str,
+    region: str,
+    max_per_category: int = 0,
+) -> list[dict]:
     resp = client.get(url, params={"gl": region, "hl": "zh-TW"})
     if resp is None or resp.status_code != 200:
         logger.warning("fetch_explore %s/%s: GET failed (status=%s)",
@@ -68,14 +77,17 @@ def _fetch_category(client: YouTubeClient, url: str, category: str, region: str)
         logger.warning("fetch_explore %s/%s: ytInitialData not found", region, category)
         return []
 
-    results = []
+    all_videos = []
     seen: set[str] = set()
     for renderer in _find_video_renderers(data):
         v = _parse_video_renderer(renderer, region, category)
         if v and v["video_id"] not in seen:
             seen.add(v["video_id"])
-            results.append(v)
-    return results
+            all_videos.append(v)
+
+    if max_per_category and len(all_videos) > max_per_category:
+        all_videos = random.sample(all_videos, max_per_category)
+    return all_videos
 
 
 def _find_video_renderers(obj, _depth=0):

@@ -31,7 +31,7 @@ _CHANNEL_TARGET_PER_HOUR = 5    # target new videos from channels
 def collect_explore(client: YouTubeClient, db: StateDB) -> int:
     """Fetch videos from YouTube Explore categories (multi-region) and register new ones."""
     now = format_iso(now_utc())
-    videos = fetch_explore(client)
+    videos = fetch_explore(client, max_per_category=random.randint(3, 5))
     new_count = 0
     for v in videos:
         added = db.add_video(
