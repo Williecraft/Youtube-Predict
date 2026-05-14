@@ -13,14 +13,25 @@ from src.utils.http_client import YouTubeClient, dig, extract_js_var
 logger = logging.getLogger(__name__)
 
 
+# YouTube search filter codes (sp parameter):
+SP_TODAY = "EgIIAQ%3D%3D"        # uploaded today
+SP_THIS_WEEK = "EgIIAg%3D%3D"    # uploaded this week
+SP_TODAY_SORT_NEW = "CAISBAgBEAE%3D"   # today + sort by upload date
+SP_LAST_HOUR_SORT_NEW = "CAESBAgBEAE%3D"  # last hour + sort by upload date (protobuf: sort=1 upload_date=1 type=1)
+
+
 def fetch_search(
     client: YouTubeClient,
     keyword: str,
     max_results: int = 10,
+    sp: str | None = None,
 ) -> list[dict]:
+    params = {"search_query": keyword, "hl": "zh-TW"}
+    if sp:
+        params["sp"] = sp
     resp = client.get(
         "https://www.youtube.com/results",
-        params={"search_query": keyword, "hl": "zh-TW"},
+        params=params,
     )
     if resp is None or resp.status_code != 200:
         logger.warning("fetch_search '%s': GET failed (status=%s)", keyword,

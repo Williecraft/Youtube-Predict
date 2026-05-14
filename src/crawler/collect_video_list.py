@@ -1,9 +1,10 @@
 """
-從三種來源收集影片 ID，寫入 state.db。
+從四種來源收集影片 ID，寫入 state.db。
 
-  collect_trending()       每 15 min 呼叫一次
-  collect_from_search()    每 1 h 呼叫一次
-  collect_from_channels()  每 1 h 呼叫一次
+  collect_explore()         每 15 min 呼叫一次
+  collect_from_shorts()     每 1 h 呼叫一次
+  collect_from_search()     每 1 h 呼叫一次
+  collect_from_channels()   每 1 h 呼叫一次
 """
 
 from __future__ import annotations
@@ -13,8 +14,11 @@ import random
 from pathlib import Path
 
 from src.crawler.fetch_channel_uploads import fetch_channel_uploads
+import re
+
 from src.crawler.fetch_explore import fetch_explore
-from src.crawler.fetch_search import fetch_search
+from src.crawler.fetch_search import SP_LAST_HOUR_SORT_NEW, fetch_search
+from src.crawler.fetch_shorts_page import fetch_shorts_page
 from src.crawler.keyword_generator import generate_keywords, _load_trending_tags
 from src.utils.http_client import YouTubeClient
 from src.utils.io import load_json_dict
@@ -23,15 +27,50 @@ from src.utils.time import format_iso, now_utc
 
 logger = logging.getLogger(__name__)
 
-_SEARCH_KEYWORDS_PER_HOUR = 7   # keyword lookups per collect_from_search() call
-_SEARCH_TARGET_PER_HOUR = 10    # target new videos from search
-_CHANNEL_TARGET_PER_HOUR = 5    # target new videos from channels
+_SEARCH_KEYWORDS_PER_HOUR = 4   # keyword lookups per collect_from_search() call
+_SEARCH_TARGET_PER_HOUR = 5     # target new videos from search
+_CHANNEL_TARGET_PER_CALL = 15   # target new videos per channel-poll call (every 10 min)
+_SHORTS_TARGET_PER_HOUR = 2     # target new Shorts per shorts_page run (runs every 10 min)
+_FRESH_SEARCH_KEYWORDS = 3      # keyword lookups per collect_from_fresh_search() call
+_FRESH_SEARCH_TARGET = 2        # target very-fresh (≤5 min uploaded) videos per call
+_FRESH_MAX_AGE_MIN = 5          # only accept videos uploaded within this many minutes
+
+# Matches relative-time strings YouTube returns in zh-TW like "3 分鐘前", "剛剛", "30 秒前"
+_RE_SEC  = re.compile(r"(\d+)\s*秒")
+_RE_MIN  = re.compile(r"(\d+)\s*分")
+
+
+def _is_very_fresh(published_time_text: str, max_min: int = _FRESH_MAX_AGE_MIN) -> bool:
+    """Return True if the relative time text indicates an actual upload within max_min minutes.
+
+    Rejects:
+      - "預定時間" / "首播" / "直播" prefixes (scheduled streams or premieres — not real uploads)
+      - empty strings
+    """
+    s = published_time_text or ""
+    if not s:
+        return False
+    # Exclude scheduled streams / premieres / live indicators
+    for marker in ("預定時間", "预定时间", "首播", "首发", "直播中", "正在直播"):
+        if marker in s:
+            return False
+    if "剛剛" in s or "刚刚" in s:
+        return True
+    if _RE_SEC.search(s):
+        return True
+    m = _RE_MIN.search(s)
+    if m:
+        try:
+            return int(m.group(1)) <= max_min
+        except ValueError:
+            return False
+    return False
 
 
 def collect_explore(client: YouTubeClient, db: StateDB) -> int:
     """Fetch videos from YouTube Explore categories (multi-region) and register new ones."""
     now = format_iso(now_utc())
-    videos = fetch_explore(client, max_per_category=random.randint(3, 5))
+    videos = fetch_explore(client, max_per_category=random.randint(1, 2))
     new_count = 0
     for v in videos:
         added = db.add_video(
@@ -51,6 +90,32 @@ def collect_explore(client: YouTubeClient, db: StateDB) -> int:
                 discovered_via_video_id=v["video_id"],
             )
     logger.info("collect_explore: %d total, %d new", len(videos), new_count)
+    return new_count
+
+
+def collect_from_shorts(client: YouTubeClient, db: StateDB) -> int:
+    """Fetch videos from the YouTube Shorts home page and register new ones."""
+    now = format_iso(now_utc())
+    videos = fetch_shorts_page(client, max_results=_SHORTS_TARGET_PER_HOUR)
+    new_count = 0
+    for v in videos:
+        added = db.add_video(
+            video_id=v["video_id"],
+            source="shorts_page",
+            source_detail="shorts_home",
+            discovered_at=now,
+        )
+        if added:
+            new_count += 1
+            logger.info("new shorts video: %s (%s)", v["video_id"], v.get("title", "")[:50])
+        if v.get("channel_id"):
+            db.upsert_channel(
+                v["channel_id"],
+                channel_title=v.get("channel_title", ""),
+                discovered_at=now,
+                discovered_via_video_id=v["video_id"],
+            )
+    logger.info("collect_from_shorts: %d total, %d new", len(videos), new_count)
     return new_count
 
 
@@ -96,6 +161,55 @@ def collect_from_search(client: YouTubeClient, db: StateDB, data_dir: Path) -> i
     return new_count
 
 
+def collect_from_fresh_search(client: YouTubeClient, db: StateDB, data_dir: Path) -> int:
+    """Search with 'today + sort by upload date' filter to catch newly uploaded videos.
+
+    Runs more often than collect_from_search to capture videos within minutes of publish.
+    """
+    now = format_iso(now_utc())
+    static_path = data_dir / "raw" / "static" / "videos_static.json"
+    trending_tags = _load_trending_tags(static_path)
+    keywords = generate_keywords(n=_FRESH_SEARCH_KEYWORDS, trending_tags=trending_tags)
+
+    new_count = 0
+    found: list[dict] = []
+
+    for kw in keywords:
+        if len(found) >= _FRESH_SEARCH_TARGET:
+            break
+        # Fetch a larger result set then filter strictly by publish freshness
+        results = fetch_search(client, kw, max_results=20, sp=SP_LAST_HOUR_SORT_NEW)
+        for v in results:
+            if not _is_very_fresh(v.get("published_time_text", "")):
+                continue
+            vid = v["video_id"]
+            if not db.get_video(vid):
+                found.append(v)
+            if len(found) >= _FRESH_SEARCH_TARGET:
+                break
+        client.jitter_sleep(1.5, 3.0)
+
+    for v in found:
+        added = db.add_video(
+            video_id=v["video_id"],
+            source="fresh_search",
+            source_detail=v.get("title", "")[:80],
+            discovered_at=now,
+        )
+        if added:
+            new_count += 1
+        if v.get("channel_id"):
+            db.upsert_channel(
+                v["channel_id"],
+                channel_title=v.get("channel_title", ""),
+                discovered_at=now,
+                discovered_via_video_id=v["video_id"],
+            )
+
+    logger.info("collect_from_fresh_search: %d new videos", new_count)
+    return new_count
+
+
 def collect_from_channels(client: YouTubeClient, db: StateDB) -> int:
     """Check tracked channels for new uploads. Returns count of new videos."""
     now = format_iso(now_utc())
@@ -107,7 +221,7 @@ def collect_from_channels(client: YouTubeClient, db: StateDB) -> int:
     new_count = 0
 
     for ch in channels:
-        if new_count >= _CHANNEL_TARGET_PER_HOUR:
+        if new_count >= _CHANNEL_TARGET_PER_CALL:
             break
 
         channel_id = ch["channel_id"]

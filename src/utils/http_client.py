@@ -50,8 +50,11 @@ def set_stop(val: bool = True):
 def _sleep(seconds: float):
     """Sleep in 0.5s chunks so Ctrl+C / _stop can interrupt."""
     end = time.monotonic() + seconds
-    while not _stop and time.monotonic() < end:
-        time.sleep(min(0.5, end - time.monotonic()))
+    while not _stop:
+        remaining = end - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(0.5, remaining))
 
 
 class YouTubeClient:

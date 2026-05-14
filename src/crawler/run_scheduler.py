@@ -30,7 +30,9 @@ from pathlib import Path
 from src.crawler.collect_video_list import (
     collect_explore,
     collect_from_channels,
+    collect_from_fresh_search,
     collect_from_search,
+    collect_from_shorts,
 )
 from src.crawler.fetch_comments import fetch_comments_snapshot
 from src.crawler.fetch_static import fetch_static
@@ -47,10 +49,17 @@ _DB_PATH = _DATA_DIR / "state.db"
 _LOG_DIR = _REPO_ROOT / "logs"
 
 # ── intervals (seconds) ────────────────────────────────────────────────────
-_INTERVAL_TRENDING_S = 15 * 60
-_INTERVAL_SEARCH_S = 60 * 60
-_INTERVAL_CHANNEL_S = 60 * 60
-_TICK_S = 60
+# Active discovery: only fresh_search (very recent uploads) and shorts_page.
+# Explore / regular search / channel polling are disabled — see DISCOVERY_DISABLED.
+_INTERVAL_FRESH_SEARCH_S = 5 * 60   # search "last hour" sort=new every 5 min, filter to ≤5 min
+_INTERVAL_SHORTS_S = 10 * 60        # poll shorts home every 10 min
+_TICK_S = 30
+
+DISCOVERY_DISABLED = True           # set False to re-enable explore/search/channel
+
+# Pause discovery (fresh_search + shorts) when overdue queue exceeds this.
+# Speedup mode: throughput ~1200 events/hour ≈ 20/min. >300 overdue = 15+ min behind.
+_AT_CAPACITY_THRESHOLD = 300
 
 setup_file_logging(_LOG_DIR)
 logger = get_logger("crawler.scheduler")
@@ -93,38 +102,67 @@ def main():
         now_ts = time.time()
 
         # ── discovery ──────────────────────────────────────────────────────
-        if now_ts - db.job_last_run("explore") >= _INTERVAL_TRENDING_S:
-            try:
-                n = collect_explore(client, db)
-                db.job_mark_ran("explore")
-                db.log_event("explore", "ok", f"found {n} new videos")
-                summary.info("[explore] +%d new videos", n)
-            except Exception as exc:
-                logger.exception("collect_explore error: %s", exc)
-                db.log_event("explore", "fail", str(exc))
-                summary.warning("[explore] ERROR: %s", exc)
+        # explore / regular search / channel polling are disabled by default.
+        # Only fresh_search + shorts_page actively discover new videos now.
+        if not DISCOVERY_DISABLED:
+            if now_ts - db.job_last_run("explore") >= 15 * 60:
+                try:
+                    n = collect_explore(client, db)
+                    db.job_mark_ran("explore")
+                    db.log_event("explore", "ok", f"found {n} new videos")
+                    summary.info("[explore] +%d new videos", n)
+                except Exception as exc:
+                    logger.exception("collect_explore error: %s", exc)
+                    db.log_event("explore", "fail", str(exc))
 
-        if now_ts - db.job_last_run("search") >= _INTERVAL_SEARCH_S:
-            try:
-                n = collect_from_search(client, db, _DATA_DIR)
-                db.job_mark_ran("search")
-                db.log_event("search", "ok", f"found {n} new videos")
-                summary.info("[search] +%d new videos", n)
-            except Exception as exc:
-                logger.exception("collect_from_search error: %s", exc)
-                db.log_event("search", "fail", str(exc))
-                summary.warning("[search] ERROR: %s", exc)
+            if now_ts - db.job_last_run("search") >= 60 * 60:
+                try:
+                    n = collect_from_search(client, db, _DATA_DIR)
+                    db.job_mark_ran("search")
+                    db.log_event("search", "ok", f"found {n} new videos")
+                    summary.info("[search] +%d new videos", n)
+                except Exception as exc:
+                    logger.exception("collect_from_search error: %s", exc)
+                    db.log_event("search", "fail", str(exc))
 
-        if now_ts - db.job_last_run("channel") >= _INTERVAL_CHANNEL_S:
+            if now_ts - db.job_last_run("channel") >= 10 * 60:
+                try:
+                    n = collect_from_channels(client, db)
+                    db.job_mark_ran("channel")
+                    db.log_event("channel", "ok", f"found {n} new videos")
+                    summary.info("[channel] +%d new videos", n)
+                except Exception as exc:
+                    logger.exception("collect_from_channels error: %s", exc)
+                    db.log_event("channel", "fail", str(exc))
+
+        # Pause discovery when timeseries queue is backed up to avoid making it worse
+        overdue = db.count_overdue_timeseries()
+        at_capacity = overdue >= _AT_CAPACITY_THRESHOLD
+        if at_capacity:
+            summary.info("[discovery] paused — overdue=%d (threshold=%d)",
+                         overdue, _AT_CAPACITY_THRESHOLD)
+
+        if not at_capacity and now_ts - db.job_last_run("shorts_page") >= _INTERVAL_SHORTS_S:
             try:
-                n = collect_from_channels(client, db)
-                db.job_mark_ran("channel")
-                db.log_event("channel", "ok", f"found {n} new videos")
-                summary.info("[channel] +%d new videos", n)
+                n = collect_from_shorts(client, db)
+                db.job_mark_ran("shorts_page")
+                db.log_event("shorts_page", "ok", f"found {n} new videos")
+                summary.info("[shorts_page] +%d new videos", n)
             except Exception as exc:
-                logger.exception("collect_from_channels error: %s", exc)
-                db.log_event("channel", "fail", str(exc))
-                summary.warning("[channel] ERROR: %s", exc)
+                logger.exception("collect_from_shorts error: %s", exc)
+                db.log_event("shorts_page", "fail", str(exc))
+                summary.warning("[shorts_page] ERROR: %s", exc)
+
+        if not at_capacity and now_ts - db.job_last_run("fresh_search") >= _INTERVAL_FRESH_SEARCH_S:
+            try:
+                n = collect_from_fresh_search(client, db, _DATA_DIR)
+                db.job_mark_ran("fresh_search")
+                db.log_event("fresh_search", "ok", f"found {n} new videos")
+                summary.info("[fresh_search] +%d new videos", n)
+            except Exception as exc:
+                logger.exception("collect_from_fresh_search error: %s", exc)
+                db.log_event("fresh_search", "fail", str(exc))
+                summary.warning("[fresh_search] ERROR: %s", exc)
 
         # ── static fetch for new videos ────────────────────────────────────
         _run_static_fetches(client, db)
@@ -142,6 +180,21 @@ def main():
                 time.sleep(0.5)
 
     summary.info("Scheduler stopped.")
+
+
+_STATIC_MAX_ATTEMPTS = 3
+
+
+def _mark_static_give_up_if_exhausted(db: StateDB, video_id: str) -> None:
+    with db._conn() as conn:
+        err_count = conn.execute(
+            "SELECT COUNT(*) FROM crawl_errors WHERE video_id=? AND task='fetch_static'",
+            (video_id,),
+        ).fetchone()[0]
+    if err_count >= _STATIC_MAX_ATTEMPTS:
+        db.update_video(video_id, static_fetched=-1)
+        logger.warning("fetch_static %s: giving up after %d failures", video_id, err_count)
+        summary.warning("[static] gave up on %s after %d failures", video_id, err_count)
 
 
 def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 5):
@@ -169,16 +222,18 @@ def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 5):
             else:
                 db.log_error(video_id, "fetch_static", "returned None")
                 db.log_event("static", "fail", "returned None", video_id)
+                _mark_static_give_up_if_exhausted(db, video_id)
         except Exception as exc:
             logger.exception("fetch_static %s error: %s", video_id, exc)
             db.log_error(video_id, "fetch_static", str(exc))
             db.log_event("static", "fail", str(exc), video_id)
+            _mark_static_give_up_if_exhausted(db, video_id)
         finally:
             db.release_lease(video_id)
-        client.jitter_sleep(1.5, 3.0)
+        client.jitter_sleep(0.8, 1.8)
 
 
-def _run_timeseries(client: YouTubeClient, db: StateDB, batch: int = 20):
+def _run_timeseries(client: YouTubeClient, db: StateDB, batch: int = 40):
     due = db.get_due_timeseries(limit=batch)
     for row in due:
         video_id = row["video_id"]
@@ -194,20 +249,20 @@ def _run_timeseries(client: YouTubeClient, db: StateDB, batch: int = 20):
                     logger.info("stopping %s — status=%s", video_id, video_status)
                     db.log_event("timeseries", "skip", f"stopped: {video_status}", video_id)
                 else:
-                    db.schedule_next_timeseries(video_id, publish_time or "")
+                    db.schedule_next_timeseries(video_id, publish_time or "", row["next_ts_due"])
                     db.log_event("timeseries", "ok",
                                  f"views={result.get('view_count')}", video_id)
             else:
                 db.log_error(video_id, "fetch_timeseries", "returned None")
                 db.log_event("timeseries", "fail", "returned None", video_id)
-                db.schedule_next_timeseries(video_id, publish_time or "")
+                db.schedule_next_timeseries(video_id, publish_time or "", row["next_ts_due"])
         except Exception as exc:
             logger.exception("fetch_timeseries %s error: %s", video_id, exc)
             db.log_error(video_id, "fetch_timeseries", str(exc))
             db.log_event("timeseries", "fail", str(exc), video_id)
         finally:
             db.release_lease(video_id)
-        client.jitter_sleep(1.0, 2.5)
+        client.jitter_sleep(0.5, 1.5)
 
 
 def _run_comments(client: YouTubeClient, db: StateDB):
@@ -252,7 +307,7 @@ def _run_comments(client: YouTubeClient, db: StateDB):
                 db.log_event("comments", "fail", f"{label}: {exc}", video_id)
             finally:
                 db.release_lease(video_id)
-            client.jitter_sleep(2.0, 4.0)
+            client.jitter_sleep(1.0, 2.0)
 
 
 if __name__ == "__main__":

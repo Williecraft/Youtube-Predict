@@ -10,7 +10,7 @@
   sports   /sports
   live     /live
   podcasts /podcasts
-  movies   /movies
+（movies 已移除：片源全屬同一 YouTube Movies 頻道，channel_id 重複無意義）
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ _EXPLORE_PAGES: list[tuple[str, str]] = [
     ("sports",   "https://www.youtube.com/sports"),
     ("live",     "https://www.youtube.com/live"),
     ("podcasts", "https://www.youtube.com/podcasts"),
-    ("movies",   "https://www.youtube.com/movies"),
 ]
 
 

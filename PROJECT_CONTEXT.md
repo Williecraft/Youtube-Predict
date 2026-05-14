@@ -74,23 +74,36 @@ results/
 
 ### 2.1 蒐集影片清單
 
-#### 來源與頻率
+#### 來源與頻率（實際 v4 策略）
+
+為確保影片進入追蹤時年齡夠小、能拿到完整 0–3h 早期資料，採取 **「只收極新影片」** 策略。`run_scheduler.py` 內 `DISCOVERY_DISABLED = True` flag 把舊版的 explore / search / channel polling 全部關掉，只保留兩個高頻活躍來源：
 
 | 來源 | 頻率 | 每次目標 | 備註 |
 |---|---|---|---|
-| `trending` 發燒影片 | 每 15 min | 抓**所有**當前發燒列表上的影片 | 多區合併：先納入 `TW`、`JP`、`US`、`KR`，同 `video_id` 去重；同一 id 再被看到只更新 `last_seen_at`，不重抓 static |
-| `search` 搜尋結果 | 每 1 hour | **x = 10** 部新影片/小時 | 從 §2.1.3 關鍵字產生器抽 5–7 個關鍵字，每個搜尋結果頁隨機挑 1–2 部尚未收錄、`age_at_discovery` 越小越優先的影片，湊滿 10 部即停 |
-| `channel` 追蹤頻道 | 每 1 hour | **y = 5** 部新影片/小時（上限） | 從 `channel_static.json` 隨機抽追蹤頻道，看 uploads 最近 3 部是否有未收錄的，沒有就抽下一個，直到湊滿 5 部或試完所有頻道；初期頻道少時實際遠少於 5 |
+| `fresh_search` 即時搜尋 | 每 5 min | 1 部/call ≈ 12 部/hr cap | 用 YouTube 搜尋 `sp=CAESBAgBEAE%3D`（filter「最近 1 小時」+ sort by upload date），再用 `_is_very_fresh()` 過濾到 publish 後 **≤5 分鐘**才收。`source_detail` 記關鍵字。排除「預定時間」/「首播」/「直播中」等排程串流 |
+| `shorts_page` Shorts 補集 | 每 10 min | 2 部/call ≈ 12 部/hr cap | 由於 `/shorts` 首頁只回傳單支影片，實際走 YouTube 搜尋 + `sp=EgQQARgD`（< 4 min 短片）+ 多個 `#shorts` 關鍵字輪詢；`source_detail` 記命中關鍵字 |
 
-不過濾 `age_at_discovery_minutes`：即使來不及拿到 0–3h 視窗，影片仍可進入回歸（48h 起算的滑動樣本）；只是這支影片不會出現在分類 dataset。
+容量控制：`run_scheduler.py` 內 `_AT_CAPACITY_THRESHOLD = 300`，當 timeseries overdue 超過 300 時暫停這兩個 discovery job，讓 queue 消化完再繼續。
+
+**已停用（程式碼仍在，由 flag 切換）：**
+
+| 來源 | 原頻率 | 停用原因 |
+|---|---|---|
+| `explore` 探索 5 分類頁 | 15 min | 影片發現延遲過高（中位數 30+ 分鐘），無法拿到 0–3h 早期資料；同時 `/movies` 分類已從清單移除（所有片屬同一 YouTube Movies 頻道） |
+| `search` 一般關鍵字搜尋 | 60 min | 同上，無 freshness filter |
+| `channel` 追蹤頻道輪詢 | 10 min | 1100+ 追蹤頻道全部 polling 成本高，多數頻道發布頻率低 |
+
+如需重啟舊來源，將 `DISCOVERY_DISABLED` 設為 `False`。
+
+不過濾 `age_at_discovery_minutes`：fresh_search 主要保證 0–3h 完整；shorts_page 沒做 freshness filter（Shorts 樣本以平衡資料集為優先）。
 
 #### 影片清單欄位
 
 每筆 entry 至少包含：
 
 - `video_id`
-- `source` ∈ {`trending`, `search`, `channel`}
-- `source_detail`（搜尋關鍵字、發燒區域＋排名、來源頻道 id）
+- `source` ∈ {`fresh_search`, `shorts_page`, `explore`, `search`, `channel`}（後三者僅出現在舊資料）
+- `source_detail`（搜尋關鍵字 / explore 的 `"{region}/{category}"` / `"shorts_home"` / 來源頻道 id）
 - `discovered_at`
 - `publish_time`（discovery 當下取得，沒拿到先空著之後補）
 - `age_at_discovery_minutes = discovered_at − publish_time`
@@ -112,7 +125,7 @@ results/
 
 組合產生範例：「美食 vlog」、「2026 遊戲推薦」、「韓劇」、「AI 教學」、「開箱 科技」。
 
-**(b) Trending tags 動態抽**：每次跑爬蟲時，從最近 24h 發燒影片的 `tags` 欄位收集高頻 tag，從中隨機抽 1–2 個。
+**(b) Trending tags 動態抽**：每次跑爬蟲時，從 `videos_static.json` 裡所有影片的 `tags` 欄位收集高頻 tag（取近期收錄的影片），從中隨機抽 1–2 個。
 
 **驗收條件**：實作前先單獨跑 50 次產生器、把生成的關鍵字列出來人工確認沒有亂碼、過於冷門、或語意奇怪的組合，OK 才接到主流程。
 
@@ -126,6 +139,7 @@ results/
 |---|---|
 | `video_id` | join key |
 | `title` | 算 `title_length` |
+| `title_length` | metadata 特徵 |
 | `channel_id` | join 頻道與訂閱數 |
 | `publish_time` | 算相對時間窗 |
 | `duration_seconds` | 影片基本特徵 |
@@ -133,6 +147,12 @@ results/
 | `tags` | 給 §2.1.3 trending tag 抽樣用，同時算 `tag_count` |
 | `tag_count` | metadata / SEO 特徵 |
 | `is_shorts` | Shorts / 長影片分流，由 §2.3 結果填入 |
+| `shorts_status_code` | §2.3 HTTP 結果，200 / 303 / null |
+| `shorts_checked_at` | §2.3 判定時間 |
+| `subscriber_count_at_fetch` | static 抓取當下的頻道訂閱數（**注意**：算 label 用的 `subscriber_count_at_publish` 仍應從 §2.4 timeseries 第一筆取，這裡是備援）|
+| `comment_count_at_fetch` | static 抓取當下的留言總數（備援） |
+| `video_status` | playabilityStatus，過濾不可用影片 |
+| `discovery_source` | 收錄來源（`fresh_search` / `shorts_page` / `explore` / `search` / `channel`），複製自 `videos.source` |
 | `static_fetched_at` | 抓取時間 |
 
 每支影片只抓一次靜態資料（除非 `is_shorts == unknown` 才會在判定成功時補回）。
@@ -156,6 +176,15 @@ results/
 | `last_new_video_at` | 上次在這頻道發現新影片的時間 |
 
 注意 `subscriber_count` 是頻道級別、會持續更新；要算 label 用的 `subscriber_count_at_publish` 必須從**該影片**第一筆 timeseries 紀錄裡取，而不是從 channel_static 取最新值。
+
+**頻道新影片爬取方式**：YouTube Atom RSS（`/feeds/videos.xml`）已於 2026 年返回 404，無法使用。改用 InnerTube：
+
+```
+POST https://www.youtube.com/youtubei/v1/browse
+{"browseId": channel_id, "params": "EgZ2aWRlb3PyBgQKAjoA"}
+```
+
+`params` 是 channel page 「Videos」tab 的 base64-encoded protobuf。每次取 `richGridRenderer.contents` 內最新 3–15 部影片（依場景），檢查是否有未收錄的。實作見 `src/crawler/fetch_channel_uploads.py`。
 
 ### 2.3 判定 Shorts
 
@@ -196,23 +225,33 @@ https://www.youtube.com/shorts/{video_id}
 | `subscriber_count` | 頻道規模校正、`subscriber_count_at_publish` 從第一筆取 |
 | `video_status` | 過濾不可用影片 |
 
-#### 爬取排程
+#### 爬取排程（實際 v4 設定）
 
-每支影片從 `discovered_at`（理想情況等於 `publish_time`）開始追蹤到 `publish_time + 168h`（7 天）為止。期間頻率：
+每支影片從 `discovered_at` 開始追蹤到 `publish_time + 72h` 為止（**從 168h 縮短至 72h**，因為回歸 target 是 48–72h，不再需要更後面的資料）。期間頻率：
 
-| 影片年齡 | 頻率 |
-|---|---|
-| 0 – 3 h | 每 5–10 min 一筆 |
-| 3 – 48 h | 每 1 h 一筆 |
-| 48 – 72 h | 每 1 h 一筆，且 48h、72h ±15 min 內必須各有一筆；找不到才於 preprocessing 用線性插補 |
-| 72 – 168 h | 每 6 h 一筆即可 |
-| > 168 h | 停止追蹤（如機器資源充足可調到 336h，由 `state.db` 的 `track_until` 欄位控制） |
+| 影片年齡 | 頻率 | 每影片總 snapshot 數 |
+|---|---|---|
+| 0 – 3 h | 每 **10 min** 一筆 | 18 |
+| 3 – 72 h | 每 **2 h** 一筆 | 34.5 |
+| > 72 h | **停止追蹤** | 0 |
+| 合計 | | ≈ 52.5 |
+
+`schedule_next_timeseries()`（在 `src/utils/state_db.py`）以 `last_due + interval`（不是 `now + interval`）排下一筆，避免飄移累積。實際間隔還是會因 tick 等待 + jitter 比設定值多 0–60 秒。
+
+#### 容量與發現速率
+
+- 主迴圈 `_TICK_S = 30s`；每 tick 取 `batch = 40` 部 timeseries 處理 → 理論吞吐 **~1200 events/hour**
+- 每部影片消耗 ~52.5 snapshot，穩態最大新影片速率 **N ≤ ~22 部/hr**
+- 發現速率上限：`fresh_search` 12/hr + `shorts_page` 12/hr = **24/hr cap**
+- 容量保險：`_AT_CAPACITY_THRESHOLD = 300`，當 `count_overdue_timeseries() > 300` 時暫停 fresh_search + shorts_page
 
 #### 排程實作要求
 
-- `state.db` 的 `videos` 表至少要有 `track_until`、`next_due_at`，scheduler 每次取 `next_due_at <= now AND track_until > now` 的影片來抓，更新成功後重排 `next_due_at`。
-- 爬蟲入口純 Python，可被 cron / Windows Task Scheduler / APScheduler 任一啟動，避免綁特定 OS。建議入口：`python -m src.crawler.run_scheduler`。
-- 多主機協作靠 `state.db` 的 SQLite WAL + 一個 `lease_until` 欄位（被某主機鎖住的影片在 lease 期限內不會被別台同時抓）。
+- `state.db` 的 `videos` 表欄位：`track_until`、**`next_ts_due`**（注意命名是 `next_ts_due` 不是 `next_due_at`），scheduler 每次取 `next_ts_due <= now AND track_until > now` 的影片來抓，更新成功後重排 `next_ts_due`。
+- 失敗保護：`fetch_static` 累積 ≥3 次錯誤的影片自動標 `static_fetched = -1`（give-up），避免單一影片永久卡住整個 pending queue。
+- 爬蟲入口：`python -m src.crawler.run_scheduler`。
+- 多主機協作靠 `state.db` 的 SQLite WAL + `lease_until` / `lease_by` 欄位。
+- **不可同時跑兩個 scheduler**：早期曾因雙 process 寫同一個 `videos_static.tmp` 造成 JSON 損毀。已用 PID-based tmp 檔名（`videos_static.{PID}.tmp`）規避，但仍應只跑一個 process。
 
 ### 2.5 爬留言
 
@@ -222,11 +261,13 @@ https://www.youtube.com/shorts/{video_id}
 
 - `video_id`
 - `comment_id`
-- `comment_text`
+- `comment_text`（已修復 ViewModel 格式 — 詳見下方 fix note，正確儲存留言內容）
 - `comment_like_count`
-- `comment_published_at`（如能拿到）
+- `comment_published_at`（YouTube 只給相對時間字串如「3 分鐘前」、「11 個月前」，無絕對 timestamp；建模需絕對時間時用 `crawl_time` 代理）
 - `crawl_time`
 - `snapshot_label` ∈ {`t1h`, `t2h`, `t3h`}
+
+> **實作注意（2024+ API）**：YouTube InnerTube 的 `commentThreadRenderer` 已改為 ViewModel 格式，留言內容改存於同一 response 的 `frameworkUpdates.entityBatchUpdate.mutations[].payload.commentEntityPayload.properties.content.content` 內。`fetch_comments.py` 的 `_extract_mutations()` 把 mutations 陣列抽成 `{commentId → {text, like_count, published_time}}` lookup table，再用 `commentViewModel.commentId` 對照填回 — 留言文字可正常儲存。
 
 規則：
 
@@ -618,16 +659,17 @@ results/feature_importance_shap.csv
 
 ```text
 src/crawler/
-  run_scheduler.py            # 主入口：依 state.db 排程觸發各 fetcher
+  run_scheduler.py            # 主入口：依 state.db 排程觸發各 fetcher，含 DISCOVERY_DISABLED flag、容量 throttle、give-up 邏輯
   keyword_generator.py        # §2.1.3 關鍵字產生器，需先單獨驗收
-  collect_video_list.py       # 三種來源（trending / search / channel）整合進 state.db
-  fetch_trending.py
-  fetch_search.py
-  fetch_channel_uploads.py
-  detect_shorts.py
+  collect_video_list.py       # 五種來源整合：collect_from_fresh_search、collect_from_shorts、collect_explore、collect_from_search、collect_from_channels
+  fetch_explore.py            # 爬 5 個 Explore 分類頁（gaming/news/sports/live/podcasts；movies 已移除）
+  fetch_shorts_page.py        # 透過 search + sp=EgQQARgD（短片 filter）+ #shorts 關鍵字撈 Shorts
+  fetch_search.py             # 一般搜尋；含 sp 參數支援（SP_LAST_HOUR_SORT_NEW、SP_TODAY 等常數）
+  fetch_channel_uploads.py    # InnerTube browse 取頻道 Videos tab（取代失效的 Atom RSS）
+  detect_shorts.py            # /shorts/{id} 200 vs 303 判定
   fetch_static.py             # 同時更新 channel_static.json
-  fetch_timeseries.py
-  fetch_comments.py           # 依 snapshot_label 三次
+  fetch_timeseries.py         # 抓 watch page 的 ytInitialData + ytInitialPlayerResponse
+  fetch_comments.py           # 含 _extract_mutations() 處理 ViewModel 格式
 
 src/preprocessing/
   clean_timeseries.py

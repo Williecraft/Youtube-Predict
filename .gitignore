@@ -46,3 +46,8 @@ desktop.ini
 # Logs
 logs/
 *.log
+
+# Temporary / scratch files
+tmp/
+
+.claude/

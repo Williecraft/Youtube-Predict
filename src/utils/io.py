@@ -24,7 +24,8 @@ def load_json_dict(path: Path | str) -> dict:
 def save_json_dict(path: Path | str, data: dict) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
+    # Include PID in tmp name so concurrent processes don't overwrite each other's write
+    tmp = p.with_name(f"{p.stem}.{os.getpid()}.tmp")
     with tmp.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp, p)  # atomic on POSIX; near-atomic on Windows

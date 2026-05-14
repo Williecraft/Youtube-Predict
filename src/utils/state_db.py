@@ -139,7 +139,7 @@ class StateDB:
         track_until = None
         if publish_time:
             try:
-                track_until = format_iso(parse_iso(publish_time) + timedelta(hours=168))
+                track_until = format_iso(parse_iso(publish_time) + timedelta(hours=72))
             except Exception:
                 pass
 
@@ -175,7 +175,7 @@ class StateDB:
             conn.execute(f"UPDATE videos SET {sets} WHERE video_id=?", vals)
 
     def set_publish_time(self, video_id: str, publish_time: str):
-        track_until = format_iso(parse_iso(publish_time) + timedelta(hours=168))
+        track_until = format_iso(parse_iso(publish_time) + timedelta(hours=72))
         self.update_video(video_id, publish_time=publish_time, track_until=track_until)
 
     # ── timeseries scheduling ──────────────────────────────────────────────
@@ -196,8 +196,25 @@ class StateDB:
             ).fetchall()
         return rows
 
-    def schedule_next_timeseries(self, video_id: str, publish_time: str):
-        """Compute and set next_ts_due based on video age."""
+    def count_overdue_timeseries(self) -> int:
+        """Count videos whose next_ts_due has passed (proxy for queue backlog)."""
+        now = format_iso(now_utc())
+        with self._conn() as conn:
+            row = conn.execute(
+                """SELECT COUNT(*) FROM videos
+                   WHERE next_ts_due <= ?
+                     AND (track_until IS NULL OR track_until > ?)
+                     AND static_fetched = 1""",
+                (now, now),
+            ).fetchone()
+        return row[0] if row else 0
+
+    def schedule_next_timeseries(self, video_id: str, publish_time: str, last_due: str | None = None):
+        """Compute and set next_ts_due based on video age.
+
+        Schedules relative to last_due (not now) so interval drift doesn't accumulate.
+        If last_due is missing or more than one interval behind, falls back to now.
+        """
         now = now_utc()
         try:
             pub = parse_iso(publish_time)
@@ -207,16 +224,23 @@ class StateDB:
         age_h = (now - pub).total_seconds() / 3600
 
         if age_h < 3:
-            interval_m = 7
-        elif age_h < 48:
-            interval_m = 60
+            interval_m = 10
         elif age_h < 72:
-            interval_m = 60
+            interval_m = 120
         else:
             interval_m = 360
 
-        next_due = format_iso(now + timedelta(minutes=interval_m))
-        self.update_video(video_id, next_ts_due=next_due)
+        # Anchor to the last scheduled time so drift doesn't accumulate.
+        # If last_due is stale (> 1 interval behind), fall back to now.
+        try:
+            base = parse_iso(last_due) if last_due else now
+        except Exception:
+            base = now
+        candidate = base + timedelta(minutes=interval_m)
+        if candidate < now:
+            candidate = now + timedelta(minutes=interval_m)
+
+        self.update_video(video_id, next_ts_due=format_iso(candidate))
 
     # ── comment snapshot scheduling ────────────────────────────────────────
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from src.utils.http_client import YouTubeClient, dig
+from src.utils.http_client import YouTubeClient, dig, parse_count_text
 from src.utils.io import append_jsonl
 from src.utils.time import format_iso, now_utc
 
@@ -112,10 +112,39 @@ def _find_any_continuation_token(obj, _depth: int = 0) -> str | None:
     return None
 
 
+def _extract_mutations(data: dict) -> dict[str, dict]:
+    """
+    Extract comment data from frameworkUpdates.entityBatchUpdate.mutations.
+    Returns {commentId: {text, like_count, published_time}} for all commentEntityPayload entries.
+    YouTube 2024+ stores the actual comment content here instead of in commentThreadRenderer.
+    """
+    result: dict[str, dict] = {}
+    mutations = dig(data, "frameworkUpdates", "entityBatchUpdate", "mutations") or []
+    for m in mutations:
+        cep = dig(m, "payload", "commentEntityPayload")
+        if not cep:
+            continue
+        comment_id = dig(cep, "properties", "commentId")
+        if not comment_id:
+            continue
+        text = dig(cep, "properties", "content", "content") or ""
+        published_at = dig(cep, "properties", "publishedTime") or ""
+        like_text = dig(cep, "toolbar", "likeCountNotliked") or "0"
+        result[comment_id] = {
+            "comment_text": text,
+            "comment_like_count": parse_count_text(like_text) or 0,
+            "comment_published_at": published_at,
+        }
+    return result
+
+
 def _parse_comment_page(data: dict) -> tuple[list[dict], str | None]:
     """Parse one page of comments. Returns (comments, next_continuation_token)."""
     comments = []
     next_token = None
+
+    # Build mutation lookup for ViewModel enrichment
+    mutations = _extract_mutations(data)
 
     # comment pages come back in onResponseReceivedEndpoints
     endpoints = data.get("onResponseReceivedEndpoints") or []
@@ -128,7 +157,7 @@ def _parse_comment_page(data: dict) -> tuple[list[dict], str | None]:
                 # commentThreadRenderer
                 ctr = item.get("commentThreadRenderer")
                 if ctr:
-                    comment = _parse_comment_thread(ctr)
+                    comment = _parse_comment_thread(ctr, mutations)
                     if comment:
                         comments.append(comment)
                 # continuationItemRenderer → next page token
@@ -141,18 +170,19 @@ def _parse_comment_page(data: dict) -> tuple[list[dict], str | None]:
     return comments, next_token
 
 
-def _parse_comment_thread(renderer: dict) -> dict | None:
-    # New YouTube ViewModel format (2024+)
+def _parse_comment_thread(renderer: dict, mutations: dict[str, dict]) -> dict | None:
+    # New YouTube ViewModel format (2024+) — enrich from mutations dict
     cvm = dig(renderer, "commentViewModel", "commentViewModel")
     if cvm:
         comment_id = cvm.get("commentId")
         if not comment_id:
             return None
+        enriched = mutations.get(comment_id, {})
         return {
             "comment_id": comment_id,
-            "comment_text": "",  # text not exposed in ViewModel format
-            "comment_like_count": 0,
-            "comment_published_at": "",
+            "comment_text": enriched.get("comment_text", ""),
+            "comment_like_count": enriched.get("comment_like_count", 0),
+            "comment_published_at": enriched.get("comment_published_at", ""),
         }
 
     # Legacy commentRenderer format
