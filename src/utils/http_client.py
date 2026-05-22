@@ -63,7 +63,7 @@ class YouTubeClient:
         self._session.headers.update({
             "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Encoding": "gzip, deflate",  # omit br — requests can't decode Brotli without the brotli package
             "Upgrade-Insecure-Requests": "1",
         })
         # Bypass YouTube consent / GDPR gate
