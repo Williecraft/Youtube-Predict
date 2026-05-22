@@ -20,11 +20,11 @@ import requests
 logger = logging.getLogger(__name__)
 
 _USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.4 Safari/605.1.15",
 ]
 
 _INNERTUBE_BASE = "https://www.youtube.com/youtubei/v1"
@@ -169,21 +169,29 @@ class YouTubeClient:
 def extract_js_var(html: str, var_name: str) -> dict:
     """
     Extract a JSON object assigned to a JS variable in the page HTML.
-    Handles both:
-      var ytInitialData = {...};
-      window["ytInitialData"] = {...};
+    Tries multiple patterns YouTube has used across versions.
     """
-    for marker in (f"{var_name} = ", f'"{var_name}":'):
+    markers = [
+        f"{var_name} = ",       # var ytInitialData = {...};
+        f"{var_name}=",         # ytInitialData={...};  (no spaces)
+        f'"{var_name}":',       # "ytInitialData":{...}  (inside another object)
+        f"'{var_name}':",       # 'ytInitialData':{...}
+        f"window[\"{var_name}\"] = ",   # window["ytInitialData"] = {...};
+        f"window['{var_name}'] = ",
+    ]
+    for marker in markers:
         idx = html.find(marker)
-        if idx != -1:
-            brace_idx = html.find("{", idx + len(marker))
-            if brace_idx != -1:
-                try:
-                    data, _ = json.JSONDecoder().raw_decode(html, brace_idx)
-                    if isinstance(data, dict):
-                        return data
-                except (json.JSONDecodeError, ValueError):
-                    pass
+        if idx == -1:
+            continue
+        brace_idx = html.find("{", idx + len(marker))
+        if brace_idx == -1:
+            continue
+        try:
+            data, _ = json.JSONDecoder().raw_decode(html, brace_idx)
+            if isinstance(data, dict) and data:
+                return data
+        except (json.JSONDecodeError, ValueError):
+            pass
     return {}
 
 

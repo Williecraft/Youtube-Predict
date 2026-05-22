@@ -51,3 +51,6 @@ logs/
 tmp/
 
 .claude/
+
+# Node (OpenSpec installed via npm)
+node_modules/
