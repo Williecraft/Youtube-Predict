@@ -55,7 +55,7 @@ _INTERVAL_FRESH_SEARCH_S = 5 * 60   # search "last hour" sort=new every 5 min, f
 _INTERVAL_SHORTS_S = 10 * 60        # poll shorts home every 10 min
 _TICK_S = 30
 
-DISCOVERY_DISABLED = True           # set False to re-enable explore/search/channel
+DISCOVERY_DISABLED = False          # set False to re-enable explore/search/channel
 
 # Pause discovery (fresh_search + shorts) when overdue queue exceeds this.
 # Speedup mode: throughput ~1200 events/hour ≈ 20/min. >300 overdue = 15+ min behind.
