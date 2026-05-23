@@ -1,0 +1,72 @@
+schema: spec-driven
+
+# Project context shown to AI when creating OpenSpec artifacts.
+context: |
+  Project: YouTube 影片爆紅預測 (資料探勘導論 Final Project, 1142 Spring 2026)
+  Authoritative spec: PROJECT_CONTEXT.md (請務必以該文件為主)。
+  Proposal/Proposal.md 與 README.md 提供補充背景。
+
+  兩個建模任務:
+    1. Classification — 預測 is_viral_48h (binary)，特徵僅能使用 publish 後 0–3h 的資料。
+    2. Regression     — 預測 log_next_24h_views，特徵僅能使用 publish 後 0–48h 的資料;
+                        label 來自 48–72h 新增觀看數。
+
+  關鍵 Label 定義:
+    effective_subscriber_count = max(subscriber_at_publish, 1000)
+    viral_view_threshold_48h   = max(min_abs_views, 2 * effective_subscriber_count)
+    is_viral_48h               = (views_48h >= viral_view_threshold_48h)
+    min_abs_views 詳見 PROJECT_CONTEXT.md §4。
+
+  資料分割 (一律以 publish_time 做 temporal split):
+    Train 70% (最早) / Valid 15% (中間) / Test 15% (最晚)
+    同一 video_id 不可跨 split; regression 樣本沿用 video_id 的 split。
+
+  Data Leakage 規則 (硬性禁區):
+    - Classification 特徵只能使用 0–3h 內爬到的資料 (含 comments)。
+    - Regression 特徵只能使用 0–48h 內的資料; 48–72h 只能進入 label。
+    - Scaler/Encoder 只能 fit 在 train。
+    - Stacking meta-learner 必須吃 OOF 預測，不能用 in-sample train 預測。
+
+  目錄規劃:
+    src/{crawler,preprocessing,modeling,utils}
+    data/{raw,processed}/...  (raw 與 processed 都在 .gitignore，不入 repo)
+    results/{metrics.csv, regression_metrics.csv, feature_importance_shap.csv, experiment_summary.csv}
+
+  技術棧:
+    爬蟲: Selenium / urllib3 (Shorts 判定靠 /shorts/{id} 的 200 vs 303)
+    資料: pandas, numpy
+    模型: scikit-learn (LogReg + stacking meta), LightGBM, PyTorch 或 TensorFlow (LSTM)
+    情緒: HuggingFace Transformers - uer/roberta-base-finetuned-jd-binary-chinese
+    可解釋性: SHAP
+
+  Stacking 架構:
+    LightGBM(tabular) → P1
+    LSTM(sequence)    → P2
+    LogisticRegression([P1, P2]) → 最終機率
+
+  特徵組 (ablation):
+    A  = 基本 metadata + 訂閱數
+    B  = A + 0–3h early traffic (growth rate / engagement / views per min)
+    C1 = B + binary sentiment
+    C2 = B + Valence-Arousal
+    C3 = B + binary sentiment + VA
+    LightGBM 共 12 個 tabular features，詳見 PROJECT_CONTEXT.md §6。
+
+  LSTM 序列格式:
+    分類: T×3 [view, like, comment]，0–3h、5–10 分鐘採樣 (T≈18–36)，每維以該影片視窗內最大值正規化。
+    回歸: 同 shape 但 0–48h; label 為 48–72h 新增觀看數。
+
+  評估指標:
+    分類: F1, AUC-ROC, Precision, Recall, PR-AUC
+    回歸: MAE, RMSE, RMSLE, R²
+
+# Per-artifact rules
+rules:
+  proposal:
+    - 任何牽涉特徵或樣本切分的提案，必須明確指出使用的時間窗 (0–3h、0–48h、48–72h) 以及如何遵守 PROJECT_CONTEXT.md 的 leakage 規則。
+    - 預設使用繁體中文撰寫，技術名詞與檔名保留英文。
+  tasks:
+    - 將任務切成可在 1–2 小時內完成的小步驟。
+    - 涉及資料處理的任務需註明輸入/輸出路徑 (對應 data/ 目錄結構)。
+  specs:
+    - Spec 改動需同步反映回 PROJECT_CONTEXT.md，或在提案中說明為何分歧。
