@@ -139,7 +139,7 @@ class StateDB:
         track_until = None
         if publish_time:
             try:
-                track_until = format_iso(parse_iso(publish_time) + timedelta(hours=72))
+                track_until = format_iso(parse_iso(publish_time) + timedelta(hours=80))
             except Exception:
                 pass
 
@@ -175,7 +175,7 @@ class StateDB:
             conn.execute(f"UPDATE videos SET {sets} WHERE video_id=?", vals)
 
     def set_publish_time(self, video_id: str, publish_time: str):
-        track_until = format_iso(parse_iso(publish_time) + timedelta(hours=72))
+        track_until = format_iso(parse_iso(publish_time) + timedelta(hours=80))
         self.update_video(video_id, publish_time=publish_time, track_until=track_until)
 
     # ── timeseries scheduling ──────────────────────────────────────────────

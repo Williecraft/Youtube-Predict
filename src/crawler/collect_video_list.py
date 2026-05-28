@@ -210,6 +210,9 @@ def collect_from_fresh_search(client: YouTubeClient, db: StateDB, data_dir: Path
     return new_count
 
 
+_CHANNEL_MAX_CHECKS_PER_CALL = 50  # cap channels checked per invocation regardless of new-video count
+
+
 def collect_from_channels(client: YouTubeClient, db: StateDB) -> int:
     """Check tracked channels for new uploads. Returns count of new videos."""
     now = format_iso(now_utc())
@@ -220,8 +223,10 @@ def collect_from_channels(client: YouTubeClient, db: StateDB) -> int:
     random.shuffle(channels)
     new_count = 0
 
-    for ch in channels:
+    for i, ch in enumerate(channels):
         if new_count >= _CHANNEL_TARGET_PER_CALL:
+            break
+        if i >= _CHANNEL_MAX_CHECKS_PER_CALL:
             break
 
         channel_id = ch["channel_id"]

@@ -52,10 +52,11 @@ _LOG_DIR = _REPO_ROOT / "logs"
 # Active discovery: only fresh_search (very recent uploads) and shorts_page.
 # Explore / regular search / channel polling are disabled — see DISCOVERY_DISABLED.
 _INTERVAL_FRESH_SEARCH_S = 5 * 60   # search "last hour" sort=new every 5 min, filter to ≤5 min
-_INTERVAL_SHORTS_S = 10 * 60        # poll shorts home every 10 min
+_INTERVAL_SHORTS_S = 5 * 60         # poll shorts home every 5 min (Shorts-only mode)
 _TICK_S = 30
 
-DISCOVERY_DISABLED = False          # set False to re-enable explore/search/channel
+DISCOVERY_DISABLED = True           # explore/search/channel disabled — Shorts-only mode
+FRESH_SEARCH_DISABLED = True        # fresh_search also disabled — only shorts_page
 
 # Pause discovery (fresh_search + shorts) when overdue queue exceeds this.
 # Speedup mode: throughput ~1200 events/hour ≈ 20/min. >300 overdue = 15+ min behind.
@@ -153,7 +154,7 @@ def main():
                 db.log_event("shorts_page", "fail", str(exc))
                 summary.warning("[shorts_page] ERROR: %s", exc)
 
-        if not at_capacity and now_ts - db.job_last_run("fresh_search") >= _INTERVAL_FRESH_SEARCH_S:
+        if not FRESH_SEARCH_DISABLED and not at_capacity and now_ts - db.job_last_run("fresh_search") >= _INTERVAL_FRESH_SEARCH_S:
             try:
                 n = collect_from_fresh_search(client, db, _DATA_DIR)
                 db.job_mark_ran("fresh_search")
