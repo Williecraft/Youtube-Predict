@@ -34,6 +34,7 @@ from torch.utils.data import DataLoader, Subset
 
 from src.modeling.evaluate import (
     compute_classification_metrics,
+    find_best_threshold,
     compute_regression_metrics,
 )
 from src.modeling.lstm_dataset import SequenceDataset, pad_collate_fn
@@ -119,8 +120,9 @@ def _predict(model: LSTMModel, loader: DataLoader, task: str) -> np.ndarray:
 
 
 def _build_model(task: str) -> LSTMModel:
+    input_size = 3 if task == "classification" else 4  # 迴歸多一欄 log_max_views
     return LSTMModel(
-        input_size=3,
+        input_size=input_size,
         hidden_size=HIDDEN_SIZE,
         num_layers=NUM_LAYERS,
         dropout=DROPOUT,
@@ -158,7 +160,12 @@ def train_classification() -> None:
     valid_ds = SequenceDataset(valid_ids, valid_labels, SEQUENCES_3H_DIR)
     test_ds  = SequenceDataset(test_ids,  test_labels,  SEQUENCES_3H_DIR)
 
-    criterion = nn.BCEWithLogitsLoss()
+    actual_labels = full_train_ds.get_labels()
+    pos_count = float(sum(actual_labels))
+    neg_count = float(len(actual_labels) - int(pos_count))
+    pw = torch.tensor([neg_count / max(pos_count, 1.0)], dtype=torch.float32).to(DEVICE)
+    logger.info("BCEWithLogitsLoss pos_weight=%.2f (pos=%d neg=%d)", pw.item(), int(pos_count), int(neg_count))
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pw)
 
     # KFold OOF
     oof_proba = np.zeros(len(full_train_ds))
@@ -231,12 +238,15 @@ def train_classification() -> None:
     valid_loader_eval = _make_loader(valid_ds)
     test_loader_eval  = _make_loader(test_ds)
 
-    for split, loader, ys in [
-        ("valid", valid_loader_eval, np.array(valid_labels)),
-        ("test",  test_loader_eval,  np.array(test_labels)),
-    ]:
-        prob = _predict(final_model, loader, "classification")
-        compute_classification_metrics(ys[:len(prob)], prob, model_name="lstm_classifier", split=split)
+    valid_prob = _predict(final_model, valid_loader_eval, "classification")
+    valid_ys   = np.array(valid_labels)[:len(valid_prob)]
+    best_thr   = find_best_threshold(valid_ys, valid_prob)
+    compute_classification_metrics(valid_ys, valid_prob, model_name="lstm_classifier",
+                                   split="valid", threshold=best_thr)
+    test_prob = _predict(final_model, test_loader_eval, "classification")
+    test_ys   = np.array(test_labels)[:len(test_prob)]
+    compute_classification_metrics(test_ys, test_prob, model_name="lstm_classifier",
+                                   split="test", threshold=best_thr)
 
     # Test 機率 for Stacking
     test_proba = _predict(final_model, test_loader_eval, "classification")

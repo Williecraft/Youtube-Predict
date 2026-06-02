@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from src.modeling.evaluate import compute_classification_metrics
+from src.modeling.evaluate import compute_classification_metrics, find_best_threshold
 from src.preprocessing.paths import MODELS_DIR, RESULTS_DIR
 
 logger = logging.getLogger(__name__)
@@ -104,15 +104,16 @@ def train() -> None:
                 len(y_oof), 100 * y_oof.mean())
 
     oof_proba = meta.predict_proba(X_oof)[:, 1]
+    best_thr = find_best_threshold(y_oof, oof_proba)
     compute_classification_metrics(
-        y_oof, oof_proba, model_name="stacking_ensemble", split="oof_train"
+        y_oof, oof_proba, model_name="stacking_ensemble", split="oof_train", threshold=best_thr
     )
 
     # ── 4.3 Test Set 推論 ─────────────────────────────────────────────────
     X_test, y_test, video_ids = load_test_predictions()
     test_proba = meta.predict_proba(X_test)[:, 1]
     compute_classification_metrics(
-        y_test, test_proba, model_name="stacking_ensemble", split="test"
+        y_test, test_proba, model_name="stacking_ensemble", split="test", threshold=best_thr
     )
 
     # 儲存 test 融合結果

@@ -89,6 +89,7 @@ def train() -> None:
         "bagging_freq": 5,
         "verbosity": -1,
         "random_state": 42,
+        "device": "gpu",
     }
 
     dtrain = lgb.Dataset(X_train, label=y_train)

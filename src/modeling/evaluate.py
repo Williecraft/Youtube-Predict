@@ -32,6 +32,18 @@ METRICS_CSV = RESULTS_DIR / "metrics.csv"
 REGRESSION_METRICS_CSV = RESULTS_DIR / "regression_metrics.csv"
 
 
+def find_best_threshold(y_true: np.ndarray, y_proba: np.ndarray) -> float:
+    """在 validation set 上用 F1 最大化找最佳 threshold。"""
+    from sklearn.metrics import precision_recall_curve
+    precision, recall, thresholds = precision_recall_curve(y_true, y_proba)
+    f1s = np.where((precision + recall) == 0, 0,
+                   2 * precision * recall / (precision + recall + 1e-9))
+    best_idx = int(np.argmax(f1s[:-1]))  # thresholds 比 p/r 少一個
+    best = float(thresholds[best_idx])
+    logger.info("Best threshold=%.4f (F1=%.4f)", best, f1s[best_idx])
+    return best
+
+
 def compute_classification_metrics(
     y_true: np.ndarray,
     y_pred_proba: np.ndarray,

@@ -24,7 +24,7 @@ from sklearn.metrics import average_precision_score
 from sklearn.model_selection import KFold
 import lightgbm as lgb
 
-from src.modeling.evaluate import compute_classification_metrics
+from src.modeling.evaluate import compute_classification_metrics, find_best_threshold
 from src.modeling.utils import temporal_split
 from src.preprocessing.paths import (
     LABEL_DATASET_CSV,
@@ -95,6 +95,7 @@ def train() -> None:
         "bagging_freq": 5,
         "verbosity": -1,
         "random_state": 42,
+        "device": "gpu",
     }
 
     # ── OOF 預測（在 train_df 的 K-Fold 上）──────────────────────────────
@@ -137,9 +138,14 @@ def train() -> None:
         callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(-1)],
     )
 
-    for split, X_s, y in [("valid", X_valid, y_valid), ("test", X_test, y_test)]:
-        prob = final_model.predict(X_s)
-        compute_classification_metrics(y, prob, model_name="lightgbm_classifier", split=split)
+    valid_prob = final_model.predict(X_valid)
+    best_thr = find_best_threshold(y_valid, valid_prob)
+    for split, prob, y in [
+        ("valid", valid_prob, y_valid),
+        ("test",  final_model.predict(X_test), y_test),
+    ]:
+        compute_classification_metrics(y, prob, model_name="lightgbm_classifier",
+                                       split=split, threshold=best_thr)
 
     # Test 機率（供 Stacking）
     test_proba_df = test_df[["video_id"]].copy().reset_index(drop=True)

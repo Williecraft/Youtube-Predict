@@ -61,6 +61,9 @@ FRESH_SEARCH_DISABLED = True        # fresh_search also disabled — only shorts
 # Pause discovery (fresh_search + shorts) when overdue queue exceeds this.
 # Speedup mode: throughput ~1200 events/hour ≈ 20/min. >300 overdue = 15+ min behind.
 _AT_CAPACITY_THRESHOLD = 300
+_STATIC_PENDING_THRESHOLD = 100
+_STATIC_PENDING_MAX_AGE_H = 3
+_STATIC_TRACKING_MAX_AGE_H = 3 + 20 / 60
 
 setup_file_logging(_LOG_DIR)
 logger = get_logger("crawler.scheduler")
@@ -136,12 +139,23 @@ def main():
                     logger.exception("collect_from_channels error: %s", exc)
                     db.log_event("channel", "fail", str(exc))
 
-        # Pause discovery when timeseries queue is backed up to avoid making it worse
+        # Keep discovery bounded so new Shorts reach static fetch while still fresh.
+        skipped_static = _skip_stale_pending_shorts(db)
+        if skipped_static:
+            summary.info("[static] skipped %d stale pending Shorts", skipped_static)
+
         overdue = db.count_overdue_timeseries()
-        at_capacity = overdue >= _AT_CAPACITY_THRESHOLD
+        pending_static = db.count_pending_static(source="shorts_page")
+        at_capacity = (
+            overdue >= _AT_CAPACITY_THRESHOLD
+            or pending_static >= _STATIC_PENDING_THRESHOLD
+        )
         if at_capacity:
-            summary.info("[discovery] paused — overdue=%d (threshold=%d)",
-                         overdue, _AT_CAPACITY_THRESHOLD)
+            summary.info(
+                "[discovery] paused: overdue_ts=%d/%d pending_static=%d/%d",
+                overdue, _AT_CAPACITY_THRESHOLD,
+                pending_static, _STATIC_PENDING_THRESHOLD,
+            )
 
         if not at_capacity and now_ts - db.job_last_run("shorts_page") >= _INTERVAL_SHORTS_S:
             try:
@@ -186,6 +200,21 @@ def main():
 _STATIC_MAX_ATTEMPTS = 3
 
 
+def _skip_stale_pending_shorts(db: StateDB) -> int:
+    """Skip pending Shorts that can no longer produce an early checkpoint."""
+    cutoff = format_iso(now_utc() - timedelta(hours=_STATIC_PENDING_MAX_AGE_H))
+    with db._conn() as conn:
+        cur = conn.execute(
+            """UPDATE videos
+               SET static_fetched = -2
+               WHERE static_fetched = 0
+                 AND source = 'shorts_page'
+                 AND discovered_at < ?""",
+            (cutoff,),
+        )
+    return cur.rowcount
+
+
 def _mark_static_give_up_if_exhausted(db: StateDB, video_id: str) -> None:
     with db._conn() as conn:
         err_count = conn.execute(
@@ -198,10 +227,18 @@ def _mark_static_give_up_if_exhausted(db: StateDB, video_id: str) -> None:
         summary.warning("[static] gave up on %s after %d failures", video_id, err_count)
 
 
-def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 5):
+def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 10):
     with db._conn() as conn:
         rows = conn.execute(
-            "SELECT video_id, source FROM videos WHERE static_fetched=0 LIMIT ?", (batch,)
+            """SELECT video_id, source
+               FROM videos
+               WHERE static_fetched = 0
+               ORDER BY
+                   CASE WHEN source = 'shorts_page' THEN 0 ELSE 1 END,
+                   discovered_at DESC,
+                   rowid DESC
+               LIMIT ?""",
+            (batch,),
         ).fetchall()
     if rows:
         summary.info("[static] fetching %d pending videos", len(rows))
@@ -218,7 +255,15 @@ def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 5):
                 db.update_video(video_id, static_fetched=1)
                 if publish_time:
                     db.set_publish_time(video_id, publish_time)
-                    db.schedule_next_timeseries(video_id, publish_time)
+                    age_h = (now_utc() - parse_iso(publish_time)).total_seconds() / 3600
+                    if age_h <= _STATIC_TRACKING_MAX_AGE_H:
+                        db.schedule_next_timeseries(video_id, publish_time)
+                    else:
+                        db.update_video(video_id, track_until=format_iso(now_utc()))
+                        summary.info(
+                            "[static] metadata only %s: published %.1fh ago",
+                            video_id, age_h,
+                        )
                 db.log_event("static", "ok", result.get("video_status", ""), video_id)
             else:
                 db.log_error(video_id, "fetch_static", "returned None")

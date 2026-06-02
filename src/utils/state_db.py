@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS videos (
     age_at_discovery_m  REAL,
     last_seen_at        TEXT,
 
-    -- static fetch
+    -- static fetch (0=pending, 1=done, -1=failed, -2=stale/skipped)
     static_fetched      INTEGER DEFAULT 0,
     shorts_checked      INTEGER DEFAULT 0,
 
@@ -207,6 +207,20 @@ class StateDB:
                      AND static_fetched = 1""",
                 (now, now),
             ).fetchone()
+        return row[0] if row else 0
+
+    def count_pending_static(self, source: str | None = None) -> int:
+        """Count videos still waiting for static metadata."""
+        with self._conn() as conn:
+            if source is None:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM videos WHERE static_fetched = 0"
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM videos WHERE static_fetched = 0 AND source = ?",
+                    (source,),
+                ).fetchone()
         return row[0] if row else 0
 
     def schedule_next_timeseries(self, video_id: str, publish_time: str, last_due: str | None = None):

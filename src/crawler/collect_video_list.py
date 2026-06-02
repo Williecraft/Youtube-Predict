@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 _SEARCH_KEYWORDS_PER_HOUR = 4   # keyword lookups per collect_from_search() call
 _SEARCH_TARGET_PER_HOUR = 5     # target new videos from search
 _CHANNEL_TARGET_PER_CALL = 15   # target new videos per channel-poll call (every 10 min)
-_SHORTS_TARGET_PER_HOUR = 20    # target new Shorts per shorts_page run (runs every 10 min)
+_SHORTS_TARGET_PER_RUN = 10     # cap new Shorts per poll so static fetch can keep up
 _FRESH_SEARCH_KEYWORDS = 3      # keyword lookups per collect_from_fresh_search() call
 _FRESH_SEARCH_TARGET = 2        # target very-fresh (≤5 min uploaded) videos per call
 _FRESH_MAX_AGE_MIN = 5          # only accept videos uploaded within this many minutes
@@ -94,28 +94,44 @@ def collect_explore(client: YouTubeClient, db: StateDB) -> int:
 
 
 def collect_from_shorts(client: YouTubeClient, db: StateDB) -> int:
-    """Fetch videos from the YouTube Shorts home page and register new ones."""
+    """Fetch Shorts candidates, pre-filter via HTTP redirect check, then register confirmed Shorts."""
+    from src.crawler.detect_shorts import detect_shorts
+
     now = format_iso(now_utc())
-    videos = fetch_shorts_page(client, max_results=_SHORTS_TARGET_PER_HOUR)
-    new_count = 0
-    for v in videos:
+    # 抓比目標多一些候選，補回被過濾掉的比例
+    candidates = fetch_shorts_page(client, max_results=_SHORTS_TARGET_PER_RUN * 8)
+    confirmed, skipped, new_count = 0, 0, 0
+
+    for v in candidates:
+        if new_count >= _SHORTS_TARGET_PER_RUN:
+            break
+        vid = v["video_id"]
+        # 預先做 HTTP redirect check，非 Shorts 直接丟棄
+        result, _ = detect_shorts(client, vid)
+        if result != "shorts":
+            skipped += 1
+            continue
+        confirmed += 1
         added = db.add_video(
-            video_id=v["video_id"],
+            video_id=vid,
             source="shorts_page",
-            source_detail="shorts_home",
+            source_detail="shorts_confirmed",
             discovered_at=now,
         )
         if added:
             new_count += 1
-            logger.info("new shorts video: %s (%s)", v["video_id"], v.get("title", "")[:50])
+            logger.info("new Shorts: %s (%s)", vid, v.get("title", "")[:50])
         if v.get("channel_id"):
             db.upsert_channel(
                 v["channel_id"],
                 channel_title=v.get("channel_title", ""),
                 discovered_at=now,
-                discovered_via_video_id=v["video_id"],
+                discovered_via_video_id=vid,
             )
-    logger.info("collect_from_shorts: %d total, %d new", len(videos), new_count)
+        client.jitter_sleep(0.3, 0.8)
+
+    logger.info("collect_from_shorts: %d candidates, %d confirmed Shorts, %d new",
+                len(candidates), confirmed, new_count)
     return new_count
 
 

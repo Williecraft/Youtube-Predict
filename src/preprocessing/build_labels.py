@@ -42,8 +42,8 @@ from src.preprocessing.paths import LABEL_DATASET_CSV, ensure_processed_dirs
 
 logger = logging.getLogger(__name__)
 
-MIN_ABS_VIEWS_LONG   = 2000
-MIN_ABS_VIEWS_SHORTS = 10000
+MIN_ABS_VIEWS_LONG   = 200
+MIN_ABS_VIEWS_SHORTS = 1000
 SUBSCRIBER_FLOOR     = 1000
 
 
@@ -93,7 +93,7 @@ def build_labels(
     df["min_abs_views_48h"] = np.where(df["is_shorts"], MIN_ABS_VIEWS_SHORTS, MIN_ABS_VIEWS_LONG)
     df["viral_view_threshold_48h"] = np.maximum(
         df["min_abs_views_48h"],
-        2 * df["effective_subscriber_count"],
+        0.5 * df["effective_subscriber_count"],
     )
     df["is_viral_48h"] = (df["views_48h"] >= df["viral_view_threshold_48h"]).astype(int)
 

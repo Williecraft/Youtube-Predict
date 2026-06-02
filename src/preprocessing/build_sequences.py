@@ -37,19 +37,27 @@ logger = logging.getLogger(__name__)
 
 _FEATURE_COLS = ["view_count", "like_count", "comment_count"]
 
+# 迴歸序列額外加 log(max_view_count+1) 作為第 4 維，保留絕對尺度
+_REGRESS_FEATURE_COLS = ["view_count", "like_count", "comment_count"]
+
 CLASSIFY_WINDOW_MIN = 180.0    # 0–3h
 REGRESS_WINDOW_MIN  = 2880.0   # 0–48h
 
 
-def _normalize_per_window(arr: np.ndarray) -> np.ndarray:
-    """每個 column 除以該 column 最大值；最大值 0 → 全 0。"""
+def _normalize_per_window(arr: np.ndarray, append_log_max_views: bool = False) -> np.ndarray:
+    """每個 column 除以該 column 最大值；最大值 0 → 全 0。
+    append_log_max_views=True 時，在正規化後額外附加第 4 欄 log(max_view+1)，保留絕對尺度。"""
     out = arr.astype(np.float32, copy=True)
+    raw_view_max = float(out[:, 0].max()) if out.shape[0] > 0 else 0.0
     for j in range(out.shape[1]):
         col_max = out[:, j].max() if out.shape[0] > 0 else 0.0
         if col_max > 0:
             out[:, j] = out[:, j] / col_max
         else:
             out[:, j] = 0.0
+    if append_log_max_views:
+        log_col = np.full((out.shape[0], 1), np.log1p(raw_view_max), dtype=np.float32)
+        out = np.concatenate([out, log_col], axis=1)
     return out
 
 
@@ -69,7 +77,8 @@ def _extract_window(
     arr = g[_FEATURE_COLS].to_numpy(dtype=np.float64)
     # NaN → 0；缺值在 clean_timeseries.py 已經做過線性插補，這裡是保險
     arr = np.nan_to_num(arr, nan=0.0)
-    return _normalize_per_window(arr)
+    is_regression = upper_bound_min >= REGRESS_WINDOW_MIN
+    return _normalize_per_window(arr, append_log_max_views=is_regression)
 
 
 def build_sequences_3h(ts: pd.DataFrame | None = None) -> int:
