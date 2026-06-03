@@ -16,7 +16,10 @@ build/
 venv/
 env/
 
-# Data — 全部納入 git 追蹤（含 raw / processed / split / state.db）
+# Data — 追蹤 raw 原始資料與爬蟲狀態 (state.db)；
+# processed/ 與 split/ 可由 raw 經 src/preprocessing/run_all.py 重建，故不追蹤。
+data/processed/
+data/split/
 
 # Models and results (large binary / generated files)
 models/
