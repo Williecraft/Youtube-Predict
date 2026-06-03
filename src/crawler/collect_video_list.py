@@ -31,9 +31,18 @@ _SEARCH_KEYWORDS_PER_HOUR = 4   # keyword lookups per collect_from_search() call
 _SEARCH_TARGET_PER_HOUR = 5     # target new videos from search
 _CHANNEL_TARGET_PER_CALL = 15   # target new videos per channel-poll call (every 10 min)
 _SHORTS_TARGET_PER_RUN = 10     # cap new Shorts per poll so static fetch can keep up
-_FRESH_SEARCH_KEYWORDS = 3      # keyword lookups per collect_from_fresh_search() call
-_FRESH_SEARCH_TARGET = 2        # target very-fresh (≤5 min uploaded) videos per call
-_FRESH_MAX_AGE_MIN = 5          # only accept videos uploaded within this many minutes
+_FRESH_MAX_AGE_MIN = 5          # _is_very_fresh 預設窗口（其他來源沿用）
+
+# ── fresh_search：熱門 Shorts 頻道快輪詢（catch 剛發布的新 Shorts）─────────────
+# hashtag/關鍵字搜尋對 fresh Shorts 命中率僅約 1/80（#shorts 被長影片濫用），不可行。
+# 唯一可靠來源是頻道 /shorts 分頁（只含真 Shorts、最新優先）。已知 Shorts 頻道有數百個，
+# shorts_page 隨機輪詢一圈要數小時，來不及在發布 3h 內抓到。fresh_search 改為固定快輪詢
+# 「最高產」的一小批頻道，每 5 分鐘回訪，才能在新 Short 剛發布時就抓到。長影片由 static
+# 階段的 is_shorts 檢查丟棄（見 run_scheduler._run_static_fetches）。
+_FRESH_SHORTS_HOT_CHANNELS = 14  # 每次呼叫快輪詢的最高產 Shorts 頻道數
+_FRESH_SHORTS_ROTATE = 4         # 另外隨機抽幾個頻道增加覆蓋廣度
+_FRESH_SHORTS_PER_CHANNEL = 3    # 每頻道取最新幾支 Short
+_FRESH_SHORTS_TARGET = 8         # 每次呼叫新 Shorts 上限（避免 static 塞車）
 
 # Matches relative-time strings YouTube returns in zh-TW like "3 分鐘前", "剛剛", "30 秒前"
 _RE_SEC  = re.compile(r"(\d+)\s*秒")
@@ -178,51 +187,64 @@ def collect_from_search(client: YouTubeClient, db: StateDB, data_dir: Path) -> i
 
 
 def collect_from_fresh_search(client: YouTubeClient, db: StateDB, data_dir: Path) -> int:
-    """Search with 'today + sort by upload date' filter to catch newly uploaded videos.
+    """快輪詢最高產 Shorts 頻道的 /shorts 分頁，catch 剛發布的新 Shorts。
 
-    Runs more often than collect_from_search to capture videos within minutes of publish.
+    為何不用搜尋：#shorts hashtag 被長影片濫用，fresh Shorts 命中率僅約 1/80。
+    /shorts 分頁只含真 Shorts 且最新優先，是唯一可靠來源。固定快輪詢一小批最高產頻道
+    （每 5 分鐘回訪），才能在新 Short 發布後數分鐘內抓到，補足 shorts_page 隨機輪詢
+    一圈要數小時、來不及在 3h 內抓到的缺口。
     """
+    from src.crawler.fetch_shorts_page import (
+        _fetch_channel_shorts_tab,
+        _load_shorts_channels,
+    )
+
     now = format_iso(now_utc())
-    static_path = data_dir / "raw" / "static" / "videos_static.json"
-    trending_tags = _load_trending_tags(static_path)
-    keywords = generate_keywords(n=_FRESH_SEARCH_KEYWORDS, trending_tags=trending_tags)
+    all_channels = _load_shorts_channels()  # most_common 排序：最高產在前
+    if not all_channels:
+        logger.info("collect_from_fresh_search: 尚無已知 Shorts 頻道，略過")
+        return 0
 
-    new_count = 0
-    found: list[dict] = []
+    # 熱門頻道（最高產，固定每次輪詢）＋ 隨機抽樣（增加覆蓋廣度）
+    hot = all_channels[:_FRESH_SHORTS_HOT_CHANNELS]
+    rest = all_channels[_FRESH_SHORTS_HOT_CHANNELS:]
+    rotate = random.sample(rest, k=min(len(rest), _FRESH_SHORTS_ROTATE)) if rest else []
+    channels = hot + rotate
 
-    for kw in keywords:
-        if len(found) >= _FRESH_SEARCH_TARGET:
+    new_count, scanned = 0, 0
+    for ch_id in channels:
+        if new_count >= _FRESH_SHORTS_TARGET:
             break
-        # Fetch a larger result set then filter strictly by publish freshness
-        results = fetch_search(client, kw, max_results=20, sp=SP_LAST_HOUR_SORT_NEW)
-        for v in results:
-            if not _is_very_fresh(v.get("published_time_text", "")):
-                continue
+        vids = _fetch_channel_shorts_tab(client, ch_id)[:_FRESH_SHORTS_PER_CHANNEL]
+        scanned += len(vids)
+        for v in vids:
             vid = v["video_id"]
-            if not db.get_video(vid):
-                found.append(v)
-            if len(found) >= _FRESH_SEARCH_TARGET:
-                break
-        client.jitter_sleep(1.5, 3.0)
-
-    for v in found:
-        added = db.add_video(
-            video_id=v["video_id"],
-            source="fresh_search",
-            source_detail=v.get("title", "")[:80],
-            discovered_at=now,
-        )
-        if added:
-            new_count += 1
-        if v.get("channel_id"):
+            if db.get_video(vid):
+                continue  # 已知影片：跳過（只收尚未見過的新 Short）
+            # /shorts 分頁的項目即為真 Shorts，免再做 redirect；
+            # 發布過久者會在 static 階段的 3h20m 閘門被丟棄。
+            added = db.add_video(
+                video_id=vid,
+                source="fresh_search",
+                source_detail=f"hot_shorts/{ch_id}",
+                discovered_at=now,
+            )
+            if added:
+                new_count += 1
+                logger.info("new fresh Short: %s (%s)", vid, v.get("title", "")[:50])
+            ch_for_video = v.get("channel_id") or ch_id
             db.upsert_channel(
-                v["channel_id"],
+                ch_for_video,
                 channel_title=v.get("channel_title", ""),
                 discovered_at=now,
-                discovered_via_video_id=v["video_id"],
+                discovered_via_video_id=vid,
             )
+        client.jitter_sleep(0.3, 0.7)
 
-    logger.info("collect_from_fresh_search: %d new videos", new_count)
+    logger.info(
+        "collect_from_fresh_search: 輪詢 %d 頻道、掃描 %d 支 Short、新增 %d 支",
+        len(channels), scanned, new_count,
+    )
     return new_count
 
 

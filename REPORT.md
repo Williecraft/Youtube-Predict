@@ -274,10 +274,10 @@ Stacking Ensemble 使用 LightGBM 與 LSTM 的 out-of-fold 預測作為 Level-1 
 |---|---:|---:|---:|---:|---:|---:|
 | Logistic Regression | 0.4043 | 0.2603 | **0.9048** | 0.9106 | 0.7748 | 0.5000 |
 | **LightGBM** | **0.5882** | **0.5000** | 0.7143 | **0.9398** | **0.7992** | 0.5839 |
-| LSTM | 0.0000 | 0.0000 | 0.0000 | 0.5907 | 0.1358 | 0.5176 |
-| Stacking Ensemble | 0.5000 | 0.3721 | 0.7619 | 0.9384 | 0.7935 | 0.6199 |
+| LSTM | 0.2679 | 0.1648 | 0.7143 | 0.5986 | 0.1377 | 0.4881 |
+| Stacking Ensemble | 0.4776 | 0.3478 | 0.7619 | **0.9389** | 0.7975 | 0.5859 |
 
-LightGBM 在 F1-score、AUC-ROC 與 PR-AUC 上皆為最佳，因此是目前最適合的主模型。Logistic Regression 的 recall 最高，可找回 90.48% viral 影片，但誤報較多。Stacking Ensemble 沒有超越 LightGBM，主要原因是 LSTM 分類器在本次資料上的訊號較弱。
+LightGBM 在 F1-score 與 PR-AUC 上皆為最佳，因此是目前最適合的主模型。Logistic Regression 的 recall 最高，可找回 90.48% viral 影片，但誤報較多。LSTM 在加入類別不平衡加權損失（pos_weight）後，recall 提升至 71.43%，但 precision 偏低，整體 F1 仍落後於 LightGBM。Stacking Ensemble 的 AUC-ROC（0.9389）略優於 LightGBM，但 F1 因為 LSTM precision 較低而受到拉低。
 
 ### 7.2 分類混淆矩陣
 
@@ -285,10 +285,10 @@ LightGBM 在 F1-score、AUC-ROC 與 PR-AUC 上皆為最佳，因此是目前最�
 |---|---:|---:|---:|---:|
 | Logistic Regression | 109 | 54 | 2 | 19 |
 | **LightGBM** | **148** | **15** | **6** | **15** |
-| LSTM | 139 | 24 | 21 | 0 |
-| Stacking Ensemble | 136 | 27 | 5 | 16 |
+| LSTM | 87 | 76 | 6 | 15 |
+| Stacking Ensemble | 133 | 30 | 5 | 16 |
 
-若實際應用重視降低誤報，建議使用 LightGBM。若應用重視盡可能不漏掉潛在熱門影片，可考慮 Logistic Regression 或調低 LightGBM threshold，再透過人工審核處理候選名單。
+若實際應用重視降低誤報，建議使用 LightGBM（FP 僅 15）。若應用重視盡可能不漏掉潛在熱門影片，可考慮 Logistic Regression 或 LSTM（recall 均達 71%+），再透過人工審核處理候選名單。
 
 ### 7.3 迴歸結果
 
@@ -337,18 +337,18 @@ LightGBM 分類模型的前 10 名 SHAP 特徵如下：
 
 目前資料量仍屬中小型，且分類目標具有不平衡問題。LightGBM 能有效利用觀看增量、訂閱數、互動率等人工設計特徵，對資料規模的需求也較低，因此在本次實驗中優於 LSTM。
 
-### 9.2 為何 LSTM 分類表現不佳
+### 9.2 為何 LSTM 分類表現不如 LightGBM
 
-LSTM 分類器在 test set 的 AUC-ROC 為 0.5907，代表仍有些微排序能力，但依 validation set 選定 threshold 後，沒有成功預測任何正類。可能原因包括：
+LSTM 分類器在加入類別不平衡加權損失（`BCEWithLogitsLoss(pos_weight≈6.9)`）後，test set recall 達 71.43%，F1-score 為 0.2679。雖然不再全部預測負類，但 precision 僅 16.5%，表示誤報率仍高。主要原因包括：
 
 1. Viral 樣本僅 145 部，序列模型可學習的正類案例不足。
 2. 每部影片的 snapshot 密度與時間間距不完全一致。
 3. 每個序列各自以最大值正規化，削弱了絕對觀看規模訊號。迴歸 LSTM 已透過附加 `log1p(max_views)` 作為第 4 維特徵修正此問題；分類 LSTM 尚未加入此修正。
 4. Tabular 模型能直接使用訂閱數、標題長度、發布時間等重要特徵，LSTM 分類器目前只看到觀看、按讚與留言序列。
 
-### 9.3 為何 Stacking 沒有改善
+### 9.3 為何 Stacking 沒有超越 LightGBM
 
-Stacking Ensemble 的 test AUC-ROC 為 0.9384，與 LightGBM 接近，但 F1-score 降至 0.5000。由於 LSTM 訊號較弱，meta-learner 沒有得到足夠互補資訊。現階段直接使用 LightGBM 較簡潔且穩定。
+Stacking Ensemble 的 test AUC-ROC 為 0.9389，略優於 LightGBM 的 0.9398，但 F1-score 為 0.4776，低於 LightGBM 的 0.5882。LSTM recall 雖高，但 precision 偏低，導致 Stacking 傾向多預測正類，FP 數從 LightGBM 的 15 增至 30。若以 AUC 為主要指標，Stacking 與 LightGBM 差距不大；若以 F1 或誤報率為考量，LightGBM 仍較適合直接使用。
 
 ### 9.4 Shorts-only 蒐集策略的影響
 
@@ -377,7 +377,7 @@ Stacking Ensemble 的 test AUC-ROC 為 0.9384，與 LightGBM 接近，但 F1-sco
 2. LightGBM 是目前最佳分類模型，test F1-score 為 0.5882，AUC-ROC 為 0.9398，PR-AUC 為 0.7992。
 3. 發布後 1 至 3 小時的觀看增量，是最重要的爆紅預測特徵。
 4. LightGBM Regression 能以 0 至 48 小時資料預測接下來 24 小時增長，在 log target 上取得 test R² 0.7667。
-5. 在目前資料量下，結構化特徵搭配 LightGBM 比 LSTM 更穩定；Stacking 也尚未超越單一 LightGBM。
+5. 在目前資料量下，結構化特徵搭配 LightGBM 比 LSTM 更穩定；LSTM 加入類別加權損失後 recall 提升，但 precision 仍偏低；Stacking 的 AUC 略優但 F1 未超越 LightGBM。
 
 若作為實際系統部署，建議先採用 LightGBM 作為主要模型，持續透過 Shorts-only 爬蟲累積完整樣本，再加入留言情緒特徵並重新評估。
 

@@ -254,6 +254,14 @@ class StateDB:
         if candidate < now:
             candidate = now + timedelta(minutes=interval_m)
 
+        # Checkpoint alignment: label/feature 端點（3h / 48h）若落在「現在」與
+        # 下一次自然取樣之間，固定間隔會跳過它（例如 47h、49h 取樣而漏掉 48h）。
+        # 把 candidate 拉到該檢查點，確保關鍵端點一定被取樣，提升命中率與序列品質。
+        for cp_min in (180.0, 2880.0):  # 3h, 48h
+            cp_time = pub + timedelta(minutes=cp_min)
+            if now < cp_time < candidate:
+                candidate = cp_time
+
         self.update_video(video_id, next_ts_due=format_iso(candidate))
 
     # ── comment snapshot scheduling ────────────────────────────────────────

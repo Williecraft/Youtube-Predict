@@ -62,8 +62,12 @@ def build_labels(
 
     # 1. 取 3h / 48h 兩個檢查點
     cps = collect_checkpoints(ts, [
-        CheckpointSpec("3h", target_min=180.0),
-        CheckpointSpec("48h", target_min=2880.0),
+        # 3h 是 0–3h 特徵端點：插值但 after 點限 ≤20min（≤200min），不引入窗口外資料
+        CheckpointSpec("3h", target_min=180.0,
+                       interpolate=True, max_after_min=20.0),
+        # 48h 是 label 端點：插值還原精確 48h 瀏覽數，after 放寬到一個取樣間隔
+        CheckpointSpec("48h", target_min=2880.0,
+                       interpolate=True, max_after_min=720.0),
     ])
 
     # 2. subscriber_count_at_publish 從每支影片第一筆 timeseries 取

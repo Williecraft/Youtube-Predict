@@ -49,14 +49,15 @@ _DB_PATH = _DATA_DIR / "state.db"
 _LOG_DIR = _REPO_ROOT / "logs"
 
 # ── intervals (seconds) ────────────────────────────────────────────────────
-# Active discovery: only fresh_search (very recent uploads) and shorts_page.
+# Active discovery: fresh_search (剛發布的新 Shorts) + shorts_page (已知 Shorts 頻道).
 # Explore / regular search / channel polling are disabled — see DISCOVERY_DISABLED.
-_INTERVAL_FRESH_SEARCH_S = 5 * 60   # search "last hour" sort=new every 5 min, filter to ≤5 min
+# 兩條來源都只收 Shorts，長影片在發現階段即丟棄。
+_INTERVAL_FRESH_SEARCH_S = 5 * 60   # #shorts hashtag「最近一小時最新」每 5 min 搜一次
 _INTERVAL_SHORTS_S = 5 * 60         # poll shorts home every 5 min (Shorts-only mode)
 _TICK_S = 30
 
 DISCOVERY_DISABLED = True           # explore/search/channel disabled — Shorts-only mode
-FRESH_SEARCH_DISABLED = True        # fresh_search also disabled — only shorts_page
+FRESH_SEARCH_DISABLED = False       # fresh_search 啟用：shorts 專用、剛發布的新 Shorts
 
 # Pause discovery (fresh_search + shorts) when overdue queue exceeds this.
 # Speedup mode: throughput ~1200 events/hour ≈ 20/min. >300 overdue = 15+ min behind.
@@ -253,7 +254,11 @@ def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 10):
             if result:
                 publish_time = result.get("publish_time")
                 db.update_video(video_id, static_fetched=1)
-                if publish_time:
+                if not result.get("is_shorts"):
+                    # Shorts-only 模式：長影片直接放棄追蹤，把時序預算全留給 Shorts
+                    db.update_video(video_id, track_until=format_iso(now_utc()))
+                    db.log_event("static", "skip", "not shorts — tracking dropped", video_id)
+                elif publish_time:
                     db.set_publish_time(video_id, publish_time)
                     age_h = (now_utc() - parse_iso(publish_time)).total_seconds() / 3600
                     if age_h <= _STATIC_TRACKING_MAX_AGE_H:
@@ -264,7 +269,9 @@ def _run_static_fetches(client: YouTubeClient, db: StateDB, batch: int = 10):
                             "[static] metadata only %s: published %.1fh ago",
                             video_id, age_h,
                         )
-                db.log_event("static", "ok", result.get("video_status", ""), video_id)
+                    db.log_event("static", "ok", result.get("video_status", ""), video_id)
+                else:
+                    db.log_event("static", "ok", result.get("video_status", ""), video_id)
             else:
                 db.log_error(video_id, "fetch_static", "returned None")
                 db.log_event("static", "fail", "returned None", video_id)

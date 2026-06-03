@@ -55,12 +55,19 @@ def build_regression(
         return empty, empty
 
     # ── checkpoints：1h / 3h / 24h / 48h / 72h ────────────────────────────
+    # 迴歸特徵用 0–48h，label 用 48–72h 新增量。各端點改插值還原精確值；
+    # 48h 是特徵/label 邊界，after 點限一個取樣間隔內以避免窺探 48–72h label 窗口。
     cps = collect_checkpoints(ts, [
-        CheckpointSpec("1h",  target_min=60.0),
-        CheckpointSpec("3h",  target_min=180.0),
-        CheckpointSpec("24h", target_min=1440.0, tolerance_min=60.0),
-        CheckpointSpec("48h", target_min=2880.0),
-        CheckpointSpec("72h", target_min=4320.0),
+        CheckpointSpec("1h",  target_min=60.0,
+                       interpolate=True, max_after_min=60.0),
+        CheckpointSpec("3h",  target_min=180.0,
+                       interpolate=True, max_after_min=60.0),
+        CheckpointSpec("24h", target_min=1440.0, tolerance_min=60.0,
+                       interpolate=True, max_after_min=120.0),
+        CheckpointSpec("48h", target_min=2880.0,
+                       interpolate=True, max_after_min=90.0),
+        CheckpointSpec("72h", target_min=4320.0,
+                       interpolate=True, max_after_min=720.0),
     ])
 
     first = first_snapshot(ts)[["video_id", "subscriber_count"]].rename(

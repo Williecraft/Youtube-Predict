@@ -50,10 +50,13 @@ def build_tabular_features(
         return pd.DataFrame()
 
     # ── checkpoints：1h、3h（防洩漏：不取 48h、72h）─────────────────────
+    # 0h 無前點，維持容差法；1h/3h 為 0–3h 特徵端點，插值但 after 限 ≤20min 防洩漏
     cps = collect_checkpoints(ts, [
         CheckpointSpec("0h", target_min=0.0,   tolerance_min=15.0),
-        CheckpointSpec("1h", target_min=60.0),
-        CheckpointSpec("3h", target_min=180.0),
+        CheckpointSpec("1h", target_min=60.0,
+                       interpolate=True, max_after_min=20.0),
+        CheckpointSpec("3h", target_min=180.0,
+                       interpolate=True, max_after_min=20.0),
     ])
 
     # ── 第一筆 snapshot 拿 subscriber_count_at_publish ─────────────────
