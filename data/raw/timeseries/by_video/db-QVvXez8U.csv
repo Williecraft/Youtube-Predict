@@ -1,7 +1,0 @@
-video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
-db-QVvXez8U,2026-05-31T03:11:38Z,41.5,12,7,,1090,OK
-db-QVvXez8U,2026-05-31T03:25:37Z,55.5,16,11,2,1090,OK
-db-QVvXez8U,2026-05-31T03:39:56Z,69.8,20,14,2,1090,OK
-db-QVvXez8U,2026-05-31T04:05:20Z,95.2,26,17,5,1090,OK
-db-QVvXez8U,2026-05-31T04:37:34Z,127.5,36,19,5,1090,OK
-db-QVvXez8U,2026-05-31T05:10:22Z,160.3,46,21,6,1090,UNPLAYABLE
