@@ -1,0 +1,4 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+FDW-6SrTT20,2026-05-28T18:39:42Z,99.7,24,1,,52300,OK
+FDW-6SrTT20,2026-05-28T18:53:40Z,113.7,30,2,,52300,OK
+FDW-6SrTT20,2026-05-28T19:03:43Z,123.8,32,2,,52300,UNPLAYABLE

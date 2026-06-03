@@ -1,0 +1,8 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+bVhldMfzDFc,2026-05-30T15:31:26Z,75.6,1,0,,100000,OK
+bVhldMfzDFc,2026-05-30T16:00:20Z,104.5,1,0,,100000,OK
+bVhldMfzDFc,2026-05-30T16:27:07Z,131.2,3,0,,100000,OK
+bVhldMfzDFc,2026-05-30T16:58:58Z,163.1,4,0,,100000,OK
+bVhldMfzDFc,2026-05-30T17:17:39Z,181.8,4,0,,100000,OK
+bVhldMfzDFc,2026-05-30T19:16:30Z,300.6,4,0,,100000,OK
+bVhldMfzDFc,2026-05-30T21:23:52Z,428.0,,0,,100000,LOGIN_REQUIRED

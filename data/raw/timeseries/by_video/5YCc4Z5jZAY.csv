@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+5YCc4Z5jZAY,2026-06-02T22:44:12Z,18.8,6,0,,616000,OK
+5YCc4Z5jZAY,2026-06-02T22:54:25Z,29.0,13,0,,616000,OK
+5YCc4Z5jZAY,2026-06-02T23:05:37Z,40.2,23,1,,616000,OK
+5YCc4Z5jZAY,2026-06-02T23:15:45Z,50.3,,1,,616000,LOGIN_REQUIRED

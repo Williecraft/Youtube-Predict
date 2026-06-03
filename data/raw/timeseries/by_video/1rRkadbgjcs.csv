@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+1rRkadbgjcs,2026-05-30T20:17:31Z,37.2,127,4,,2380,OK
+1rRkadbgjcs,2026-05-30T20:50:47Z,70.4,128,4,,2380,OK
+1rRkadbgjcs,2026-05-30T21:13:20Z,93.0,128,4,,2380,OK
+1rRkadbgjcs,2026-05-30T21:40:39Z,120.3,,4,,2380,LOGIN_REQUIRED

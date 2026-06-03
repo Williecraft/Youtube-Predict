@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+2K8sIlrADkY,2026-05-30T19:41:06Z,64.8,14,1,,53200,OK
+2K8sIlrADkY,2026-05-30T20:12:07Z,95.8,15,1,,53200,OK
+2K8sIlrADkY,2026-05-30T20:42:37Z,126.3,15,1,,53300,OK
+2K8sIlrADkY,2026-05-30T21:10:50Z,154.5,15,1,,53300,OK
+2K8sIlrADkY,2026-05-30T21:36:30Z,180.2,,1,,53300,LOGIN_REQUIRED

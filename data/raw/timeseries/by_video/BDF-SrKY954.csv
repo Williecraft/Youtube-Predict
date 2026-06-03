@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+BDF-SrKY954,2026-05-30T20:12:00Z,71.8,39,5,,31600,OK
+BDF-SrKY954,2026-05-30T20:41:30Z,101.3,56,6,,31600,OK
+BDF-SrKY954,2026-05-30T21:10:40Z,130.5,60,6,,31600,OK
+BDF-SrKY954,2026-05-30T21:36:22Z,156.2,,7,,31600,LOGIN_REQUIRED

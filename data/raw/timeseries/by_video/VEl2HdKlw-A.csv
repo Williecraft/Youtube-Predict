@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+VEl2HdKlw-A,2026-06-02T22:50:41Z,20.1,1,0,,15900,OK
+VEl2HdKlw-A,2026-06-02T23:00:51Z,30.3,5,0,,15900,OK
+VEl2HdKlw-A,2026-06-02T23:11:25Z,40.9,4,0,,15900,OK
+VEl2HdKlw-A,2026-06-02T23:20:51Z,50.3,,0,,15900,LOGIN_REQUIRED

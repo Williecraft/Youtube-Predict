@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+eg1eV9qZvLk,2026-05-30T09:52:49Z,80.4,6255,20,,11600,OK
+eg1eV9qZvLk,2026-05-30T10:18:07Z,105.7,6919,20,,11600,OK
+eg1eV9qZvLk,2026-05-30T10:45:03Z,132.6,6989,20,,11600,OK
+eg1eV9qZvLk,2026-05-30T11:10:48Z,158.3,6993,20,,11600,UNPLAYABLE

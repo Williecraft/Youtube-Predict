@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+m5wsVbkiKbo,2026-05-28T10:30:48Z,134.1,22,11,1,2070,OK
+m5wsVbkiKbo,2026-05-28T10:40:22Z,143.7,24,11,2,2070,OK
+m5wsVbkiKbo,2026-05-28T10:50:47Z,154.1,27,12,2,2070,OK
+m5wsVbkiKbo,2026-05-28T11:00:44Z,164.1,27,12,2,2070,OK
+m5wsVbkiKbo,2026-05-28T11:10:13Z,173.5,27,12,2,2070,UNPLAYABLE

@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+KSLLB25pZcM,2026-05-28T23:15:03Z,72.5,4,2,,1240,OK
+KSLLB25pZcM,2026-05-28T23:23:59Z,81.4,4,2,,1240,OK
+KSLLB25pZcM,2026-05-28T23:39:59Z,97.4,4,2,,1240,OK
+KSLLB25pZcM,2026-05-29T00:10:14Z,127.7,,,,,ERROR

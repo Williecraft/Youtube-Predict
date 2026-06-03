@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+Zv7FOCm8qhg,2026-06-02T15:25:55Z,190.4,1805,24,2,712000,OK
+Zv7FOCm8qhg,2026-06-02T17:25:53Z,310.4,2425,31,2,712000,OK
+Zv7FOCm8qhg,2026-06-02T19:25:55Z,430.4,3134,34,3,712000,OK
+Zv7FOCm8qhg,2026-06-02T21:26:47Z,551.2,3754,39,4,712000,OK
+Zv7FOCm8qhg,2026-06-02T23:25:55Z,670.4,,45,4,712000,LOGIN_REQUIRED

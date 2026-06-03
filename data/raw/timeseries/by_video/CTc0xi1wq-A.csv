@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+CTc0xi1wq-A,2026-05-30T20:12:34Z,60.6,75,18,,18900,OK
+CTc0xi1wq-A,2026-05-30T20:43:06Z,91.1,1224,41,,18900,OK
+CTc0xi1wq-A,2026-05-30T21:11:10Z,119.2,2172,58,,18900,OK
+CTc0xi1wq-A,2026-05-30T21:36:58Z,145.0,,58,,18900,LOGIN_REQUIRED

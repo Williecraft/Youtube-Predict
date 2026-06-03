@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+LFxHtm4G0H4,2026-06-03T05:22:17Z,85.2,0,0,,61,OK
+LFxHtm4G0H4,2026-06-03T05:32:41Z,95.6,0,1,,61,OK
+LFxHtm4G0H4,2026-06-03T05:42:04Z,105.0,1,1,,61,OK
+LFxHtm4G0H4,2026-06-03T05:52:32Z,115.5,1,1,,61,UNPLAYABLE

@@ -1,0 +1,9 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+bq92V_oAoMU,2026-05-31T06:10:08Z,58.9,0,0,,268,OK
+bq92V_oAoMU,2026-05-31T06:46:08Z,94.8,0,0,,268,OK
+bq92V_oAoMU,2026-05-31T07:11:24Z,120.1,0,0,,268,OK
+bq92V_oAoMU,2026-05-31T07:26:54Z,135.6,0,0,,268,OK
+bq92V_oAoMU,2026-05-31T07:44:37Z,153.3,0,0,,268,OK
+bq92V_oAoMU,2026-05-31T08:15:54Z,184.6,0,0,,268,OK
+bq92V_oAoMU,2026-05-31T10:17:36Z,306.3,0,0,,269,OK
+bq92V_oAoMU,2026-05-31T11:55:14Z,403.9,3,0,,270,UNPLAYABLE

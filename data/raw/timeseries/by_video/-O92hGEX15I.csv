@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+-O92hGEX15I,2026-06-03T04:11:56Z,11.7,110,0,,354000,OK
+-O92hGEX15I,2026-06-03T04:23:44Z,23.5,525,0,,354000,OK
+-O92hGEX15I,2026-06-03T04:32:36Z,32.4,951,1,,354000,OK
+-O92hGEX15I,2026-06-03T04:43:51Z,43.6,1184,3,,354000,UNPLAYABLE

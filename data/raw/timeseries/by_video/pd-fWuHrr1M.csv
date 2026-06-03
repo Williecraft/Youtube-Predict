@@ -1,0 +1,4 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+pd-fWuHrr1M,2026-06-01T11:25:34Z,1510.8,3058,18,5,1470000,OK
+pd-fWuHrr1M,2026-06-01T13:25:21Z,1630.6,3089,18,5,1470000,OK
+pd-fWuHrr1M,2026-06-01T15:29:08Z,1754.4,3089,18,5,1470000,UNPLAYABLE

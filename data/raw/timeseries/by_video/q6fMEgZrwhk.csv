@@ -1,0 +1,9 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+q6fMEgZrwhk,2026-05-28T17:26:24Z,170.1,2,2,1,2,OK
+q6fMEgZrwhk,2026-05-28T17:36:58Z,180.7,2,2,1,2,OK
+q6fMEgZrwhk,2026-05-28T19:36:14Z,299.9,2,2,1,2,OK
+q6fMEgZrwhk,2026-05-28T21:45:58Z,429.7,2,2,1,2,OK
+q6fMEgZrwhk,2026-05-28T23:53:22Z,557.1,2,2,1,2,OK
+q6fMEgZrwhk,2026-05-29T01:53:28Z,677.2,2,2,1,2,OK
+q6fMEgZrwhk,2026-05-29T03:47:50Z,791.5,2,2,1,2,OK
+q6fMEgZrwhk,2026-05-29T05:53:36Z,917.3,,,,,ERROR

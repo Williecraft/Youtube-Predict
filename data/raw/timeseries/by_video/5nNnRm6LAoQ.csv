@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+5nNnRm6LAoQ,2026-05-30T19:48:41Z,42.1,0,1,,225,OK
+5nNnRm6LAoQ,2026-05-30T20:14:58Z,68.4,0,1,,225,OK
+5nNnRm6LAoQ,2026-05-30T20:47:41Z,101.2,0,1,,225,OK
+5nNnRm6LAoQ,2026-05-30T21:12:51Z,126.3,0,0,,225,OK
+5nNnRm6LAoQ,2026-05-30T21:38:58Z,152.4,,1,,225,LOGIN_REQUIRED

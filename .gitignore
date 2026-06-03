@@ -16,11 +16,7 @@ build/
 venv/
 env/
 
-# Data — raw and processed data are NOT committed
-data/raw/
-data/processed/
-data/split/
-data/state.db
+# Data — 全部納入 git 追蹤（含 raw / processed / split / state.db）
 
 # Models and results (large binary / generated files)
 models/

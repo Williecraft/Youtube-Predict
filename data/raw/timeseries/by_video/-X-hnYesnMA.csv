@@ -1,0 +1,8 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+-X-hnYesnMA,2026-05-29T09:16:37Z,42.7,31,2,,52500,OK
+-X-hnYesnMA,2026-05-29T09:46:19Z,72.4,48,3,,52500,OK
+-X-hnYesnMA,2026-05-29T10:15:09Z,101.2,73,4,,52600,OK
+-X-hnYesnMA,2026-05-29T10:41:18Z,127.4,105,5,,52600,OK
+-X-hnYesnMA,2026-05-29T11:11:03Z,157.1,143,7,,52600,OK
+-X-hnYesnMA,2026-05-29T11:36:34Z,182.6,164,7,,52600,OK
+-X-hnYesnMA,2026-05-29T13:34:43Z,300.8,337,13,,52699,OK

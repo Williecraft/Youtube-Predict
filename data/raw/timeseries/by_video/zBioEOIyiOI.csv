@@ -1,0 +1,9 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+zBioEOIyiOI,2026-05-28T22:26:25Z,126.1,1,0,,215,OK
+zBioEOIyiOI,2026-05-28T22:39:33Z,139.2,1,0,,215,OK
+zBioEOIyiOI,2026-05-28T23:03:37Z,163.3,1,0,,215,OK
+zBioEOIyiOI,2026-05-28T23:21:49Z,181.5,1,0,,215,OK
+zBioEOIyiOI,2026-05-29T01:27:05Z,306.8,1,0,,215,OK
+zBioEOIyiOI,2026-05-29T03:28:11Z,427.9,1,0,,215,OK
+zBioEOIyiOI,2026-05-29T05:30:30Z,550.2,8,2,1,215,OK
+zBioEOIyiOI,2026-05-29T07:30:15Z,669.9,,,,,ERROR

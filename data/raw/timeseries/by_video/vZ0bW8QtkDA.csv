@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+vZ0bW8QtkDA,2026-06-03T05:56:02Z,17.2,0,0,,120,OK
+vZ0bW8QtkDA,2026-06-03T06:06:25Z,27.6,0,0,,120,OK
+vZ0bW8QtkDA,2026-06-03T06:17:21Z,38.5,0,0,,120,OK
+vZ0bW8QtkDA,2026-06-03T06:26:13Z,47.4,1,1,,120,OK
+vZ0bW8QtkDA,2026-06-03T06:37:15Z,58.4,,,,,ERROR
