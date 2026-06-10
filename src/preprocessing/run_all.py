@@ -15,9 +15,11 @@
     data/processed/sequences_3h/{video_id}.npy
     data/processed/sequences_48h/{sample_id}.npy
 
-不在前處理範圍：
-    - 留言情緒特徵（§7）— 屬於後續特徵工程，會跟 transformer model 一起做
-    - 資料切分（§10 train/valid/test）— 屬於 modeling 階段
+包含步驟：
+    clean_timeseries → labels → split → tabular_features → sequences → regression
+
+    Comment emotion features 由 build_comment_emotion_features.py 單獨跑（需要 GPU），
+    不納入主 pipeline，避免拖慢一般 preprocessing。
 
 每個 step 為獨立 callable，可單獨匯入或跑 module main()。
 """
@@ -36,6 +38,7 @@ from src.preprocessing import (
     build_sequences,
     build_tabular_features,
     clean_timeseries,
+    split_dataset,
 )
 from src.preprocessing.paths import ensure_processed_dirs
 
@@ -46,6 +49,7 @@ logger = logging.getLogger("preprocessing.run_all")
 STEPS: list[tuple[str, Callable[[], None]]] = [
     ("clean_timeseries",  clean_timeseries.main),
     ("labels",            build_labels.main),
+    ("split",             split_dataset.main),       # 分組時序切分（在 labels 之後）
     ("tabular_features",  build_tabular_features.main),
     ("sequences",         build_sequences.main),
     ("regression",        build_regression_dataset.main),

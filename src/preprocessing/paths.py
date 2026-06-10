@@ -35,13 +35,20 @@ CLEAN_TIMESERIES_PARQUET   = PROCESSED_DIR / "clean_timeseries.parquet"  # §3 �
 SEQUENCES_3H_DIR  = PROCESSED_DIR / "sequences_3h"
 SEQUENCES_48H_DIR = PROCESSED_DIR / "sequences_48h"
 
+COMMENT_FEATURES_CSV = PROCESSED_DIR / "comment_features.csv"
+
+# ── split dir ─────────────────────────────────────────────────────────────
+SPLIT_DIR     = DATA_DIR / "split"
+SPLIT_MAP_CSV = SPLIT_DIR / "split_map.csv"
+
 # ── result dirs ──────────────────────────────────────────────────────────
-RESULTS_DIR = REPO_ROOT / "results"
-MODELS_DIR  = REPO_ROOT / "models"
+RESULTS_DIR    = REPO_ROOT / "results"
+FIGURES_DIR    = RESULTS_DIR / "figures"
+MODELS_DIR     = REPO_ROOT / "models"
 
 
 def ensure_processed_dirs() -> None:
     """確保前處理會用到的輸出目錄都存在。"""
     for d in (PROCESSED_DIR, SEQUENCES_3H_DIR, SEQUENCES_48H_DIR,
-              RESULTS_DIR, MODELS_DIR):
+              SPLIT_DIR, RESULTS_DIR, FIGURES_DIR, MODELS_DIR):
         d.mkdir(parents=True, exist_ok=True)

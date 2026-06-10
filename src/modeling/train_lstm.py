@@ -39,7 +39,7 @@ from src.modeling.evaluate import (
 )
 from src.modeling.lstm_dataset import SequenceDataset, pad_collate_fn
 from src.modeling.lstm_model import LSTMModel
-from src.modeling.utils import temporal_split
+from src.modeling.utils import apply_split
 from src.preprocessing.paths import (
     LABEL_DATASET_CSV,
     MODELS_DIR,
@@ -144,7 +144,7 @@ def _make_loader(dataset: SequenceDataset, shuffle: bool = False) -> DataLoader:
 
 def train_classification() -> None:
     df = load_classification_data()
-    train_df, valid_df, test_df = temporal_split(df)
+    train_df, valid_df, test_df = apply_split(df)
     logger.info("CLF Split: train=%d valid=%d test=%d", len(train_df), len(valid_df), len(test_df))
 
     # ── OOF on train split ────────────────────────────────────────────────
@@ -267,7 +267,7 @@ def train_classification() -> None:
 
 def train_regression() -> None:
     df = load_regression_data()
-    train_df, valid_df, test_df = temporal_split(df)
+    train_df, valid_df, test_df = apply_split(df, id_col="video_id")
     logger.info("REG Split: train=%d valid=%d test=%d", len(train_df), len(valid_df), len(test_df))
 
     def _filter_existing(rows: pd.DataFrame) -> tuple[list[str], list[float]]:

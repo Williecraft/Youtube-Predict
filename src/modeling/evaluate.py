@@ -50,6 +50,7 @@ def compute_classification_metrics(
     model_name: str,
     split: str = "test",
     threshold: float = 0.5,
+    feature_group: str = "B",
 ) -> dict:
     """計算分類指標並 append 至 results/metrics.csv。"""
     y_true = np.asarray(y_true)
@@ -59,6 +60,7 @@ def compute_classification_metrics(
     has_both_classes = len(np.unique(y_true)) > 1
     metrics = {
         "model": model_name,
+        "feature_group": feature_group,
         "split": split,
         "timestamp": datetime.utcnow().isoformat(),
         "f1": f1_score(y_true, y_pred, zero_division=0),
@@ -84,6 +86,7 @@ def compute_regression_metrics(
     y_pred: np.ndarray,
     model_name: str,
     split: str = "test",
+    feature_group: str = "B",
 ) -> dict:
     """計算迴歸指標並 append 至 results/regression_metrics.csv。"""
     y_true = np.asarray(y_true, dtype=float)
@@ -98,6 +101,7 @@ def compute_regression_metrics(
 
     metrics = {
         "model": model_name,
+        "feature_group": feature_group,
         "split": split,
         "timestamp": datetime.utcnow().isoformat(),
         "mae": mae,
