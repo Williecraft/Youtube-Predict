@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+RDAXd9cR6qc,2026-06-03T10:10:01Z,69.5,3145,68,,385000,OK
+RDAXd9cR6qc,2026-06-03T10:21:07Z,80.5,4335,85,,385000,OK
+RDAXd9cR6qc,2026-06-03T10:30:00Z,89.4,4733,95,,385000,OK
+RDAXd9cR6qc,2026-06-03T10:41:41Z,101.1,4945,110,,385000,OK
+RDAXd9cR6qc,2026-06-03T10:50:59Z,110.4,5099,134,,385000,UNPLAYABLE

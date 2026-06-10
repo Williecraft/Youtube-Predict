@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+eBUGEov-_CM,2026-06-04T03:10:24Z,40.4,523,24,5,2480000,OK
+eBUGEov-_CM,2026-06-04T03:20:09Z,50.1,650,32,5,2480000,OK
+eBUGEov-_CM,2026-06-04T03:30:48Z,60.8,839,40,5,2480000,OK
+eBUGEov-_CM,2026-06-04T03:39:54Z,69.9,992,53,5,2480000,OK
+eBUGEov-_CM,2026-06-04T03:51:30Z,81.5,1196,63,5,2480000,UNPLAYABLE

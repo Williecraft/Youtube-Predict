@@ -1,0 +1,4 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+cwRNdX0VcK8,2026-06-04T02:13:13Z,30.5,7,1,,34100,OK
+cwRNdX0VcK8,2026-06-04T02:23:39Z,41.0,7,1,,34100,OK
+cwRNdX0VcK8,2026-06-04T02:34:50Z,52.1,,,,,ERROR

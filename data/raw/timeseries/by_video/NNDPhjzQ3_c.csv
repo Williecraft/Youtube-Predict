@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+NNDPhjzQ3_c,2026-06-03T12:01:09Z,68.7,3301,13,1,752000,OK
+NNDPhjzQ3_c,2026-06-03T12:11:09Z,78.7,3311,13,1,752000,OK
+NNDPhjzQ3_c,2026-06-03T12:21:24Z,89.0,3314,13,1,752000,OK
+NNDPhjzQ3_c,2026-06-03T12:32:01Z,99.6,3314,14,1,752000,OK
+NNDPhjzQ3_c,2026-06-03T12:42:52Z,110.5,3314,16,1,752000,UNPLAYABLE

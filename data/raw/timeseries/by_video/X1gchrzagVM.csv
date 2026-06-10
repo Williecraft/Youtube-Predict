@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+X1gchrzagVM,2026-06-03T17:13:31Z,13.1,18,1,,355000,OK
+X1gchrzagVM,2026-06-03T17:23:32Z,23.1,46,2,,355000,OK
+X1gchrzagVM,2026-06-03T17:33:35Z,33.2,96,2,,356000,OK
+X1gchrzagVM,2026-06-03T17:44:59Z,44.6,158,3,,356000,OK
+X1gchrzagVM,2026-06-03T17:54:05Z,53.7,202,4,,356000,UNPLAYABLE

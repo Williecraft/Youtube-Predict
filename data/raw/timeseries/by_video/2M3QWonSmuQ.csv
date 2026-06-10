@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+2M3QWonSmuQ,2026-06-06T06:08:38Z,38.6,550,6,,106000,OK
+2M3QWonSmuQ,2026-06-06T06:20:21Z,50.3,585,9,1,106000,OK
+2M3QWonSmuQ,2026-06-06T06:28:52Z,58.8,591,9,1,106000,OK
+2M3QWonSmuQ,2026-06-06T06:39:28Z,69.4,591,10,1,106000,OK
+2M3QWonSmuQ,2026-06-06T06:48:47Z,78.8,591,10,1,106000,UNPLAYABLE

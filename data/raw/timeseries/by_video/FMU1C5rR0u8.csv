@@ -1,0 +1,4 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+FMU1C5rR0u8,2026-06-03T12:23:54Z,16.8,3,0,,543000,OK
+FMU1C5rR0u8,2026-06-03T12:33:14Z,26.1,8,0,,543000,OK
+FMU1C5rR0u8,2026-06-03T12:43:04Z,36.0,12,0,1,543000,UNPLAYABLE

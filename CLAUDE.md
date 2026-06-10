@@ -48,11 +48,33 @@ results/
 
 ```
 effective_subscriber_count = max(subscriber_at_publish, 1000)
-viral_view_threshold_48h   = max(min_abs_views, 2 * effective_subscriber_count)
-is_viral_48h               = (views_48h >= viral_view_threshold_48h)
+
+min_abs_views_48h:
+  Shorts  → 10,000
+  長影片  → 2,000
+
+viral_view_threshold_48h = max(min_abs_views_48h, 2 * effective_subscriber_count)
+is_viral_48h             = (views_48h >= viral_view_threshold_48h)
 ```
 
-`views_48h` is measured at publish_time + 48 h. The `min_abs_views` constant is defined in PROJECT_CONTEXT.md Section 4.
+`views_48h` is measured at publish_time + 48 h. Full formula in PROJECT_CONTEXT.md Section 4.
+`is_shorts` is also a **model feature** (Group A onward).
+
+## Crawler Shorts-Only Mode（爬蟲模式說明）
+
+**目的**：平衡 Shorts 與長影片在訓練集的比例，**不是**讓專案只分析 Shorts。
+兩種影片都是分析對象，`is_shorts` 本身也是 Group A 的 feature。
+
+**現狀**：`run_scheduler.py` 的 `DISCOVERY_DISABLED = True` 已停用舊的
+explore / search / channel 來源，只保留 `fresh_search` + `shorts_page`，
+以補足 Shorts 數量。比例平衡後可恢復（設 `DISCOVERY_DISABLED = False`）。
+
+**重要限制 — 請勿刪除長影片 raw 資料：**
+- `data/raw/` 下所有 timeseries CSV、videos_static.json、留言 JSONL **一律保留**，
+  不論影片是 Shorts 還是長影片。歷史長影片資料是訓練集的一部分，刪掉無法重建。
+- 可從 raw 重建的 `data/processed/` 與 `data/split/` 才能清除或從 git 排除。
+- 新發現的非 Shorts 影片在 `_run_static_fetches()` 中被設 `track_until=now`
+  停止**新的追蹤**，但已存在的長影片時序資料仍須保留。
 
 ## Feature Groups (Ablation Study)
 

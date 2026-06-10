@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+DpiKWiApVcE,2026-06-05T08:10:16Z,127.0,13,6,1,9100,OK
+DpiKWiApVcE,2026-06-05T08:20:27Z,137.1,13,6,1,9100,OK
+DpiKWiApVcE,2026-06-05T08:30:04Z,146.8,16,7,1,9100,OK
+DpiKWiApVcE,2026-06-05T08:39:59Z,156.7,16,7,1,9100,OK
+DpiKWiApVcE,2026-06-05T08:52:01Z,168.7,16,7,1,9110,UNPLAYABLE

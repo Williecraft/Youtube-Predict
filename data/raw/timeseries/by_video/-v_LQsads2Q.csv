@@ -1,0 +1,4 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+-v_LQsads2Q,2026-06-08T15:20:26Z,125.4,6,1,,1300,OK
+-v_LQsads2Q,2026-06-08T15:30:29Z,135.5,7,1,,1300,OK
+-v_LQsads2Q,2026-06-08T15:40:29Z,145.5,7,1,,1300,UNPLAYABLE

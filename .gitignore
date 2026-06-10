@@ -21,9 +21,8 @@ env/
 data/processed/
 data/split/
 
-# Models and results (large binary / generated files)
+# Models (large binary files)
 models/
-results/
 
 # Jupyter
 .ipynb_checkpoints/

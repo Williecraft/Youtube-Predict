@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+JZcwXIOHm30,2026-06-08T23:09:48Z,25.5,22,0,,214000,OK
+JZcwXIOHm30,2026-06-08T23:19:54Z,35.6,28,1,,214000,OK
+JZcwXIOHm30,2026-06-08T23:30:34Z,46.3,33,2,,214000,OK
+JZcwXIOHm30,2026-06-08T23:39:44Z,55.4,44,3,1,214000,OK
+JZcwXIOHm30,2026-06-08T23:51:42Z,67.4,58,4,2,214000,UNPLAYABLE

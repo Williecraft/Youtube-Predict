@@ -1,0 +1,4 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+a_Xfc0UVwtQ,2026-06-09T01:33:33Z,34.1,353,26,3,390000,OK
+a_Xfc0UVwtQ,2026-06-09T01:41:42Z,42.3,406,32,3,390000,OK
+a_Xfc0UVwtQ,2026-06-09T01:52:34Z,53.2,445,34,3,390000,UNPLAYABLE

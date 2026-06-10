@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+1J93eEXnNoo,2026-06-10T01:12:13Z,14.8,37,3,,543000,OK
+1J93eEXnNoo,2026-06-10T01:21:08Z,23.7,44,5,,543000,OK
+1J93eEXnNoo,2026-06-10T01:32:16Z,34.9,68,6,1,543000,OK
+1J93eEXnNoo,2026-06-10T01:40:26Z,43.0,76,6,1,543000,OK
+1J93eEXnNoo,2026-06-10T01:53:08Z,55.7,88,6,1,543000,UNPLAYABLE

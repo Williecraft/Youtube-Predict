@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+r-tvgw8LIU8,2026-06-04T00:04:04Z,18.3,164,14,1,1700000,OK
+r-tvgw8LIU8,2026-06-04T00:13:41Z,27.9,240,23,1,1700000,OK
+r-tvgw8LIU8,2026-06-04T00:23:56Z,38.2,314,33,1,1700000,OK
+r-tvgw8LIU8,2026-06-04T00:34:33Z,48.8,395,37,1,1700000,OK
+r-tvgw8LIU8,2026-06-04T00:43:57Z,58.2,468,46,1,1700000,UNPLAYABLE

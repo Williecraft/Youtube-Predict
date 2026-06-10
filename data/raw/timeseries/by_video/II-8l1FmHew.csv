@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+II-8l1FmHew,2026-06-05T08:10:17Z,88.3,68,3,1,9100,OK
+II-8l1FmHew,2026-06-05T08:20:29Z,98.5,76,3,1,9100,OK
+II-8l1FmHew,2026-06-05T08:30:12Z,108.2,111,4,1,9100,OK
+II-8l1FmHew,2026-06-05T08:40:04Z,118.1,152,5,1,9100,OK
+II-8l1FmHew,2026-06-05T08:52:05Z,130.1,176,5,1,9110,UNPLAYABLE

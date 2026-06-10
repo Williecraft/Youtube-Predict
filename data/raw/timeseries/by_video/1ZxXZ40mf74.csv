@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+1ZxXZ40mf74,2026-06-08T19:23:45Z,65.1,28,1,,117000,OK
+1ZxXZ40mf74,2026-06-08T19:33:50Z,75.2,28,1,,117000,OK
+1ZxXZ40mf74,2026-06-08T19:43:48Z,85.2,32,2,,117000,OK
+1ZxXZ40mf74,2026-06-08T19:53:36Z,95.0,32,1,,117000,UNPLAYABLE

@@ -1,0 +1,4 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+cJ7aEX5vq_M,2026-06-05T03:29:04Z,123.2,0,0,,29200,OK
+cJ7aEX5vq_M,2026-06-05T03:38:03Z,132.1,0,0,,29200,OK
+cJ7aEX5vq_M,2026-06-05T03:48:03Z,142.1,863,4,,29200,UNPLAYABLE

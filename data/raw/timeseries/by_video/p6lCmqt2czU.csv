@@ -1,0 +1,8 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+p6lCmqt2czU,2026-06-07T15:44:44Z,92.3,2,0,,21200,OK
+p6lCmqt2czU,2026-06-07T15:55:32Z,103.1,6,0,,21200,OK
+p6lCmqt2czU,2026-06-07T16:05:04Z,112.6,8,1,,21300,OK
+p6lCmqt2czU,2026-06-07T16:14:46Z,122.3,11,1,,21300,OK
+p6lCmqt2czU,2026-06-07T16:24:53Z,132.4,12,1,,21300,OK
+p6lCmqt2czU,2026-06-07T16:35:12Z,142.8,13,1,,21300,OK
+p6lCmqt2czU,2026-06-07T16:44:34Z,152.1,15,1,,21300,UNPLAYABLE

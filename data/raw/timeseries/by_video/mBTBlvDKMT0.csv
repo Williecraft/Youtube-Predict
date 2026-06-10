@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+mBTBlvDKMT0,2026-06-03T12:10:56Z,12.8,0,1,,543000,OK
+mBTBlvDKMT0,2026-06-03T12:20:27Z,22.3,12,2,,543000,OK
+mBTBlvDKMT0,2026-06-03T12:31:20Z,33.1,23,3,,543000,OK
+mBTBlvDKMT0,2026-06-03T12:40:22Z,42.2,29,3,,543000,UNPLAYABLE

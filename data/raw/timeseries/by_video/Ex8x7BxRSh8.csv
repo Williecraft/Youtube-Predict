@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+Ex8x7BxRSh8,2026-06-09T12:23:40Z,47.3,131,4,,1230,OK
+Ex8x7BxRSh8,2026-06-09T12:35:18Z,58.9,139,4,,1230,OK
+Ex8x7BxRSh8,2026-06-09T12:43:56Z,67.5,142,5,1,1230,OK
+Ex8x7BxRSh8,2026-06-09T12:54:33Z,78.2,142,4,,1230,UNPLAYABLE

@@ -1,0 +1,108 @@
+{
+  "snapshot_note": "Final fixed snapshot after crawler was stopped on 2026-06-03.",
+  "generated_at": "2026-06-03T08:14:13.423767+00:00",
+  "raw": {
+    "timeseries_rows": 80891,
+    "timeseries_videos": 2519,
+    "comment_files": 1685,
+    "comment_videos": 742,
+    "comment_records": 18158
+  },
+  "processed": {
+    "clean_timeseries_rows": 80372,
+    "clean_timeseries_videos": 2496,
+    "tabular_feature_rows": 22553,
+    "sequence_3h_eligible": 7433,
+    "sequence_48h_eligible": 9113
+  },
+  "classification": {
+    "samples": 1386,
+    "viral": 170,
+    "viral_rate": 0.12265512265512266,
+    "shorts": 114,
+    "shorts_rate": 0.08225108225108226,
+    "viral_levels": {
+      "non_viral": 1286,
+      "strong": 37,
+      "viral": 34,
+      "super_viral": 29
+    },
+    "publish_range": {
+      "start": "2026-05-08T11:36:25+00:00",
+      "end": "2026-05-31T03:30:36+00:00"
+    },
+    "split": {
+      "train": {
+        "n": 970,
+        "start": "2026-05-08T11:36:25+00:00",
+        "end": "2026-05-17T22:15:01+00:00",
+        "positive": 125,
+        "positive_rate": 0.12886597938144329
+      },
+      "valid": {
+        "n": 207,
+        "start": "2026-05-17T22:15:16+00:00",
+        "end": "2026-05-22T20:19:00+00:00",
+        "positive": 23,
+        "positive_rate": 0.1111111111111111
+      },
+      "test": {
+        "n": 209,
+        "start": "2026-05-22T20:22:24+00:00",
+        "end": "2026-05-31T03:30:36+00:00",
+        "positive": 22,
+        "positive_rate": 0.10526315789473684
+      }
+    }
+  },
+  "regression": {
+    "samples": 1739,
+    "publish_range": {
+      "start": "2026-05-06T18:39:30+00:00",
+      "end": "2026-05-31T08:00:26+00:00"
+    },
+    "split": {
+      "train": {
+        "n": 1217,
+        "start": "2026-05-06T18:39:30+00:00",
+        "end": "2026-05-16T09:33:14+00:00"
+      },
+      "valid": {
+        "n": 260,
+        "start": "2026-05-16T09:45:01+00:00",
+        "end": "2026-05-22T18:44:35+00:00"
+      },
+      "test": {
+        "n": 262,
+        "start": "2026-05-22T18:47:45+00:00",
+        "end": "2026-05-31T08:00:26+00:00"
+      }
+    },
+    "target_next24h_views": {
+      "median": 118.34474445515934,
+      "mean": 4999.954165184111,
+      "p90": 7337.811574673607,
+      "max": 665156.3139685659
+    }
+  },
+  "crawler_state_final": {
+    "discovered_videos": 38680,
+    "static_ok": 22562,
+    "static_pending": 0,
+    "static_failed": 36,
+    "channels": 10364,
+    "crawl_errors": 3155,
+    "comment_t1h_done": 6618,
+    "comment_t2h_done": 8707,
+    "comment_t3h_done": 9795,
+    "source_counts": {
+      "shorts_page": 33465,
+      "explore": 2737,
+      "fresh_search": 1967,
+      "channel": 280,
+      "search": 231
+    },
+    "crawl_log_first_event": "2026-05-08T14:10:51Z",
+    "crawl_log_last_event": "2026-06-03T08:14:13Z"
+  }
+}

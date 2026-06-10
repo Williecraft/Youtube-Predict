@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+1COAWlgGk6c,2026-06-08T17:13:00Z,12.7,20,0,,362000,OK
+1COAWlgGk6c,2026-06-08T17:21:39Z,21.4,62,1,,362000,OK
+1COAWlgGk6c,2026-06-08T17:34:17Z,34.0,123,1,,362000,OK
+1COAWlgGk6c,2026-06-08T17:41:27Z,41.2,149,2,1,362000,UNPLAYABLE

@@ -1,0 +1,7 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+sqrBeiEtl5Q,2026-06-05T09:59:02Z,113.7,15,5,,521,OK
+sqrBeiEtl5Q,2026-06-05T10:09:24Z,124.1,15,5,,521,OK
+sqrBeiEtl5Q,2026-06-05T10:21:11Z,135.9,24,7,,521,OK
+sqrBeiEtl5Q,2026-06-05T10:29:20Z,144.0,28,7,,521,OK
+sqrBeiEtl5Q,2026-06-05T10:39:59Z,154.7,35,9,,521,OK
+sqrBeiEtl5Q,2026-06-05T10:49:59Z,164.7,41,9,,520,UNPLAYABLE

@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+0_csFZvlztQ,2026-06-03T19:06:55Z,16.2,108,16,1,1700000,OK
+0_csFZvlztQ,2026-06-03T19:16:11Z,25.5,221,33,1,1700000,OK
+0_csFZvlztQ,2026-06-03T19:26:22Z,35.6,325,45,2,1700000,OK
+0_csFZvlztQ,2026-06-03T19:39:09Z,48.4,417,58,3,1700000,OK
+0_csFZvlztQ,2026-06-03T19:46:04Z,55.4,467,73,5,1700000,UNPLAYABLE

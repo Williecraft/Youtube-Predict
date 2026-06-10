@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+9An0P1hjn_I,2026-06-07T17:10:01Z,39.4,283,18,1,20000,OK
+9An0P1hjn_I,2026-06-07T17:21:14Z,50.6,338,26,1,20000,OK
+9An0P1hjn_I,2026-06-07T17:32:47Z,62.2,391,36,1,20000,OK
+9An0P1hjn_I,2026-06-07T17:41:13Z,70.6,437,43,1,20000,OK
+9An0P1hjn_I,2026-06-07T17:51:06Z,80.5,491,51,1,20000,UNPLAYABLE

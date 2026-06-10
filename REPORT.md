@@ -1,132 +1,101 @@
 # YouTube 影片早期成長與爆紅預測
 
 > 資料探勘導論期末專題報告底稿
-> 最新模型流程執行日期：2026-06-02
+> 爬蟲停止日期：2026-06-10
+> 模型流程執行日期：2026-06-10
 > 本文件可直接作為報告基底，再依課程格式補上組員、課程資訊與分工。
 
 ## 摘要
 
-本專題建立一套持續運作的 YouTube 影片資料蒐集與預測流程，目標是在影片發布初期，根據觀看數、互動數、頻道規模與影片靜態資訊，預測影片後續是否會爆紅，並估計未來觀看成長量。
+本專題建立一套 YouTube 影片資料蒐集與爆紅預測流程，核心問題有二：（1）能否使用發布後前 3 小時的資料預測影片 48 小時內是否爆紅（分類）；（2）能否使用前 48 小時資料預測接下來 24 小時的新增觀看數（迴歸）。
 
-系統透過自製爬蟲持續收集影片靜態資料、觀看數時間序列與留言快照。本次報告使用 2026-06-02 11:23（Asia/Taipei）重新執行 preprocessing 所產生的固定快照。該快照包含 162,396 筆清理後時間序列觀測，涵蓋 11,105 部影片。其中，1,222 部影片同時具備接近發布後 3 小時與 48 小時的有效觀測，可用於爆紅分類；1,420 部影片同時具備接近 48 小時與 72 小時的有效觀測，可用於觀看成長迴歸。
+資料蒐集於 2026-06-10 停止，固定快照包含 **1,916 筆**分類樣本與 **2,394 筆**迴歸樣本，分類病毒率 **12.58%**。為避免 Shorts 集中於測試集，採用**分組時序切分**（Shorts 與長影片各自按發布時間分別切分 70/15/15 再合併），每個切分的 Shorts 比例均約 34%。
 
-分類任務比較 Logistic Regression、LightGBM、LSTM 與 Stacking Ensemble。測試集結果顯示，LightGBM 表現最佳，F1-score 為 0.5882、AUC-ROC 為 0.9398、PR-AUC 為 0.7992。迴歸任務比較 LightGBM 與 LSTM，LightGBM 同樣較佳，在 `log1p(next_24h_views)` 目標上取得測試集 R² 0.7667。SHAP 分析顯示，發布後 1 至 3 小時的觀看增量，以及頻道訂閱數，是爆紅預測最重要的兩項特徵。
-
-本次結果說明，早期成長速度對後續爆紅具有明顯預測力；相較於序列模型，結構化特徵搭配 LightGBM 在目前資料規模與資料品質下更穩定。系統已切換為 Shorts-only 蒐集模式，以增加 Shorts 樣本，但新的 Shorts 尚需累積至少 48 小時才能進入分類資料集，因此目前結果仍應視為階段性基準。
+分類任務比較五個特徵群組（A–C3）、四種模型。測試集最佳為 **LightGBM Group C2**：F1=**0.763**、AUC-ROC=**0.934**；若以 AUC 為主則 **LightGBM C1** 最佳：AUC=**0.943**、F1=**0.752**。加入留言情緒特徵（Group C1–C3）在覆蓋率 34% 的條件下相對 Group B 仍有實質改善（F1 +0.02 至 +0.03）。迴歸任務中，LightGBM Group C1 測試集 **R²=0.853**，優於 Group B（R²=0.851）。SHAP 分析顯示，頻道訂閱數（`log_subscriber_count`，SHAP=2.109）與發布後早期觀看增量（`views_3h`=0.770，`view_delta_1h_3h`=0.683）是最關鍵的爆紅預測特徵。
 
 ## 1. 研究背景與動機
 
-YouTube 影片的觀看成長具有高度不均衡與長尾特性。多數影片觀看量有限，少數影片則可能在發布後快速擴散。若能在發布初期預測後續表現，可協助創作者、內容平台或行銷人員提早辨識具有潛力的影片。
+YouTube 影片觀看成長具有高度不均衡與長尾特性。多數影片觀看量有限，少數影片可能在發布後數小時內快速擴散。若能在發布初期預測後續表現，可協助創作者、平台或行銷人員提早辨識具有潛力的影片。
 
 本專題聚焦兩個問題：
 
-1. 能否使用影片發布後前 3 小時的資料，預測影片在 48 小時內是否爆紅？
-2. 能否使用影片發布後前 48 小時的資料，預測接下來 24 小時的新增觀看數？
+1. 能否使用影片發布後前 **3 小時**的資料，預測影片在 **48 小時**內是否爆紅？
+2. 能否使用影片發布後前 **48 小時**的資料，預測接下來 **24 小時**的新增觀看數？
 
-此外，專題也希望比較傳統機器學習與深度學習序列模型的表現，確認在目前資料規模下，複雜模型是否真的帶來改善。
+此外，專題也探討：留言情緒特徵（Group C1/C2/C3）是否能提升預測表現，以及 Shorts 與長影片的分布如何影響模型公平性。
 
 ## 2. 系統架構
 
-```mermaid
-flowchart LR
-    A[Shorts 頁面與既有頻道] --> B[影片 ID 蒐集]
-    B --> C[靜態資訊抓取]
-    C --> D[時間序列排程]
-    C --> E[留言快照排程]
-    D --> F[資料清理與 checkpoint 對齊]
-    E --> G[原始留言資料]
-    F --> H[分類特徵與 3h 序列]
-    F --> I[迴歸特徵與 48h 序列]
-    H --> J[Logistic / LightGBM / LSTM / Stacking]
-    I --> K[LightGBM / LSTM Regression]
-    J --> L[分類評估與 SHAP]
-    K --> M[迴歸評估]
 ```
-
-系統包含四個主要模組：
-
-| 模組 | 功能 |
-|---|---|
-| 爬蟲排程 | 持續發現影片、抓取靜態資訊、定期記錄觀看與互動數 |
-| 原始資料儲存 | 使用 JSON、CSV、JSONL 與 SQLite 保存影片、時間序列、留言與排程狀態 |
-| 前處理流程 | 清理時間序列、對齊 checkpoint、建立分類與迴歸特徵 |
-| 模型與評估 | 訓練分類、迴歸、序列與 ensemble 模型，輸出指標與 SHAP 排名 |
+Shorts 頁面 / 頻道搜尋
+        │
+        ▼
+  影片 ID 蒐集 (crawler)
+        │
+        ├─── 靜態資訊抓取 (videos_static.json)
+        │
+        ├─── 時序排程 (by_video/*.csv)
+        │
+        └─── 留言快照 (comments/by_video/*.jsonl)
+                │
+                ▼
+  clean_timeseries → build_labels → split_dataset
+        │
+        ├─── build_tabular_features → 分類特徵 (tabular_features.csv)
+        │
+        ├─── build_sequences → 3h / 48h sequences (.npy)
+        │
+        ├─── build_regression_dataset → regression_features_48h.csv
+        │
+        └─── build_comment_emotion_features → comment_features.csv
+                │
+                ▼
+  Logistic / LightGBM / LSTM / Stacking (分類)
+  LightGBM / LSTM (迴歸)
+  SHAP 分析 → feature_importance_shap.csv
+```
 
 ## 3. 資料蒐集
 
 ### 3.1 蒐集內容
 
-系統目前蒐集三類資料：
-
 | 資料類型 | 主要欄位 |
 |---|---|
-| 影片靜態資訊 | `video_id`、標題、發布時間、影片長度、分類、標籤數、是否為 Shorts、頻道 ID |
-| 時間序列 | 抓取時間、發布後經過分鐘數、觀看數、按讚數、留言數、訂閱數、影片狀態 |
-| 留言快照 | 影片 ID、快照時間點、留言 ID、留言文字、留言按讚數、留言發布時間 |
+| 影片靜態資訊 | `video_id`、標題、發布時間、影片長度、分類、標籤數、是否 Shorts、頻道 ID |
+| 時間序列 | 抓取時間、發布後分鐘數、觀看數、按讚數、留言數、訂閱數、影片狀態 |
+| 留言快照 | 影片 ID、快照時點（`t3h`）、留言文字、留言按讚數 |
 
-留言快照目前已完成蒐集，但尚未加入本次模型特徵。現階段模型使用的是影片靜態資訊與觀看、按讚、留言數量等結構化欄位。
-
-### 3.2 爬蟲即時狀態
-
-爬蟲在模型訓練期間仍持續運作，未曾停止。以下為撰寫報告時的即時狀態，因此數字會繼續增加：
+### 3.2 蒐集規模
 
 | 項目 | 數量 |
 |---|---:|
-| 已發現影片 | 36,266 |
-| 已取得靜態資訊 | 19,846 |
-| 尚待處理 static queue | 692 |
-| 已標記為過期、略過的 Shorts pending | 15,692 |
-| 頻道數 | 10,304 |
-| 爬蟲錯誤紀錄 | 3,154 |
+| 分類可用樣本 | 1,916 |
+| 迴歸可用樣本 | 2,394 |
+| Tabular feature rows | 33,895 |
+| 留言 t3h 快照影片數 | 642（可建立情緒特徵）|
 
-影片來源分布如下：
+爬蟲後期切換為 **Shorts-only 模式**（`DISCOVERY_DISABLED = True`），目的是補足 Shorts 比例以達到分布均衡。兩類影片均是本專題的分析對象，`is_shorts` 本身也是 Group A 以上的模型特徵。
 
-| 來源 | 數量 |
+### 3.3 留言情緒資料規模
+
+| 項目 | 數量 |
 |---|---:|
-| Shorts page | 31,503 |
-| Explore | 2,737 |
-| Fresh search | 1,515 |
-| Channel | 280 |
-| Search | 231 |
+| 有 t3h 留言快照的影片 | 642 |
+| 分類樣本中有情緒特徵的比例 | ~34% |
 
-先前 Shorts 樣本不足，因此目前蒐集策略已改為 Shorts-only。為避免新 Shorts 在 queue 中等待過久、錯過 3 小時 checkpoint，排程器會優先處理最新影片，並略過等待超過 3 小時的 pending Shorts。
-
-### 3.3 固定 preprocessing 快照
-
-模型訓練使用 2026-06-02 11:23（Asia/Taipei）產生的 processed 快照，而非隨時變動的 raw 資料。
-
-| 階段 | 數量 |
-|---|---:|
-| 原始時間序列 | 171,541 筆，涵蓋 12,873 部影片 |
-| 清理後時間序列 | 162,396 筆，涵蓋 11,105 部影片 |
-| Tabular feature rows | 19,767 |
-| 可建立 3h LSTM 序列 | 7,026 |
-| 可建立 48h LSTM 序列 | 8,675 |
-| 有留言快照的影片 | 1,886 |
-| 留言紀錄 | 38,918 |
-| 分類可用樣本 | 1,222 |
-| 迴歸可用樣本 | 1,420 |
-
-分類樣本數遠少於已發現影片數，主要原因是分類資料必須同時命中接近發布後 3 小時與 48 小時的 checkpoint。YouTube 無法回補歷史觀看數，因此若影片進入排程時已經太晚，就無法補出早期觀測。
+留言情緒特徵目前覆蓋約 34% 的分類樣本，其餘以 0 填補。
 
 ## 4. 資料前處理
 
 ### 4.1 時間序列清理
 
-時間序列清理流程如下：
-
-1. 將抓取時間統一轉為 UTC datetime。
+1. 抓取時間統一轉為 UTC datetime。
 2. 依靜態資料中的發布時間重新計算 `time_since_publish_minutes`。
-3. 移除 `UNPLAYABLE`、`LOGIN_REQUIRED` 等非正常狀態的觀測。
-4. 將觀看數、按讚數、留言數與訂閱數轉為數值。
-5. 對同一影片、同一分鐘的重複 snapshot 去重，保留觀看數較高者。
-6. 對發布後前 3 小時內的缺值進行線性插值。
+3. 移除 `UNPLAYABLE`、`LOGIN_REQUIRED` 等非正常狀態。
+4. 對同一影片、同一分鐘的重複 snapshot 去重（保留觀看數較高者）。
+5. 對 Shorts 影片以前後最大值約束插值，防止資料洩漏。
 
-本次清理後由 171,541 筆原始觀測保留 162,396 筆有效觀測。
-
-### 4.2 Checkpoint 規則
-
-模型需要擷取最接近目標時間點的 snapshot。若 snapshot 與目標時間差超過容許範圍，該 checkpoint 視為缺失。
+### 4.2 Checkpoint 對齊規則
 
 | Checkpoint | 容許誤差 |
 |---|---:|
@@ -136,324 +105,240 @@ flowchart LR
 | 48h | ±90 分鐘 |
 | 72h | ±120 分鐘 |
 
-### 4.3 爆紅標籤
+### 4.3 爆紅標籤定義
 
-分類目標為 `is_viral_48h`。實作規則如下：
-
-```text
+```
 effective_subscriber_count = max(subscriber_count_at_publish, 1000)
-min_abs_views_48h = 1000 if is_shorts else 200
-viral_threshold_48h = max(min_abs_views_48h, 0.5 * effective_subscriber_count)
+min_abs_views_48h = 10000 (Shorts) 或 2000 (長影片)
+viral_threshold_48h = max(min_abs_views_48h, 2 × effective_subscriber_count)
 is_viral_48h = 1 if views_48h >= viral_threshold_48h else 0
 ```
 
-此定義同時考量絕對觀看量與頻道規模，避免大型頻道僅因訂閱基數較高就被判定為爆紅，也避免小型頻道只靠極低基數造成比例失真。
-
-另建立四級描述性標籤：
-
-| 等級 | 條件概念 |
-|---|---|
-| `non_viral` | 未達主要比例條件 |
-| `strong` | 48h 觀看量至少約為有效訂閱數 1 倍 |
-| `viral` | 48h 觀看量至少約為有效訂閱數 2 倍，且通過絕對觀看門檻 |
-| `super_viral` | 48h 觀看量至少約為有效訂閱數 5 倍，且通過絕對觀看門檻 |
+此定義同時考量絕對觀看量與頻道規模，對 Shorts 設定較高的絕對門檻（10,000），反映 Shorts 平台的較高流通速度。
 
 ### 4.4 迴歸目標
 
-迴歸任務使用影片發布後 0 至 48 小時的資料，預測 48 至 72 小時之間的新增觀看數：
-
-```text
+```
 next_24h_views = max(views_72h - views_48h, 0)
 log_next_24h_views = log1p(next_24h_views)
 ```
 
-由於觀看數呈現明顯長尾分布，模型實際預測 `log_next_24h_views`，降低極端熱門影片對訓練的影響。
+### 4.5 分組時序切分（核心設計）
 
-## 5. 特徵工程
+直接對全部影片做時序切分，會導致 Shorts（集中在後期爬蟲大量加入）幾乎全部落入 test set，造成模型在長影片上訓練、在 Shorts 上評估的偏差。
 
-### 5.1 分類 Tabular Features
+解法：**Shorts 與長影片各自按發布時間排序，分別切 70/15/15，再合併**。
 
-分類模型使用發布後前 3 小時內可得的資訊：
+| Split | 樣本數 | Shorts 比例 |
+|---|---:|---:|
+| Train | 1,133 | ~34% |
+| Valid | 380 | ~34% |
+| Test | 403 | ~34% |
 
-| 特徵群組 | 特徵 |
-|---|---|
-| 靜態資訊 | 影片長度、發布小時、是否 Shorts、標題長度、標籤數 |
-| 頻道規模 | `log_subscriber_count` |
-| 初期互動 | 1h / 3h 觀看數、3h 按讚數、3h 留言數 |
-| 成長速度 | 0h 至 1h 觀看增量、1h 至 3h 觀看增量、早期成長率、每分鐘觀看數 |
-| 互動比例 | 按讚觀看比、留言觀看比、早期 engagement rate |
-| Log 特徵 | 3h 觀看、按讚、留言數的 `log1p` |
+各切分 Shorts 比例均維持在約 34%，避免評估偏差。
 
-### 5.2 分類 LSTM Sequence
+![資料切分平衡](results/figures/fig01_data_split_balance.png)
 
-LSTM 分類模型使用發布後 0 至 3 小時內的序列：
-
-```text
-[view_count, like_count, comment_count]
-```
-
-每支影片的每個欄位分別依該影片時間窗內最大值正規化至 `[0, 1]`。模型架構為兩層 LSTM、hidden size 64、dropout 0.3，最後接線性輸出層。
-
-### 5.3 迴歸特徵
-
-LightGBM 迴歸模型使用 0 至 48 小時內的靜態與成長資訊，包括：
-
-- 1h、3h、24h、48h 觀看數與其 `log1p`。
-- 不同時間區間的新增觀看量。
-- 晚期與早期增長比。
-- 48h 按讚數、留言數與互動比例。
-- 影片長度、發布時間、標籤數、頻道規模與 Shorts 標記。
-
-LSTM 迴歸模型則使用 0 至 48 小時序列，並額外加入該時間窗最大觀看數的 `log1p` 作為每個 time step 的附加欄位。
-
-## 6. 實驗設計
-
-### 6.1 Temporal Split
-
-為避免未來資料洩漏至訓練集，所有資料依發布時間排序後切分：
-
-| Split | 比例 |
-|---|---:|
-| Train | 70% |
-| Validation | 15% |
-| Test | 15% |
-
-分類資料切分如下：
-
-| Split | 樣本數 | Viral 數 | Viral 比例 | 發布時間範圍（UTC） |
-|---|---:|---:|---:|---|
-| Train | 855 | 109 | 12.75% | 2026-05-08 至 2026-05-17 |
-| Validation | 183 | 15 | 8.20% | 2026-05-17 至 2026-05-29 |
-| Test | 184 | 21 | 11.41% | 2026-05-29 至 2026-05-31 |
-
-迴歸資料切分如下：
-
-| Split | 樣本數 | 發布時間範圍（UTC） |
-|---|---:|---|
-| Train | 993 | 2026-05-06 至 2026-05-16 |
-| Validation | 213 | 2026-05-16 至 2026-05-23 |
-| Test | 214 | 2026-05-23 至 2026-05-30 |
-
-### 6.2 分類資料分布
+### 4.6 分類資料分布
 
 | 項目 | 數量 |
 |---|---:|
-| 分類樣本總數 | 1,222 |
-| Viral 樣本 | 145 |
-| Viral 比例 | 11.87% |
-| Shorts 樣本 | 100 |
-| Shorts 比例 | 8.18% |
+| 分類樣本總數 | 1,916 |
+| Viral 樣本 | 241 |
+| Viral 比例 | 12.58% |
 
-四級標籤分布：
+![病毒率分布](results/figures/fig03_viral_rate_by_type.png)
 
-| 等級 | 數量 |
-|---|---:|
-| `non_viral` | 1,137 |
-| `strong` | 33 |
-| `viral` | 28 |
-| `super_viral` | 24 |
+## 5. 特徵工程
 
-目前分類資料仍以先前蒐集的一般影片為主。雖然爬蟲已切換為 Shorts-only，但新 Shorts 必須等待 48 小時才能形成分類標籤，因此尚未大量進入本次 fixed snapshot。
+### 5.1 特徵群組（Ablation Study）
 
-### 6.3 模型
-
-| 任務 | 模型 |
+| 群組 | 特徵內容 |
 |---|---|
-| 爆紅分類 | Logistic Regression、LightGBM、LSTM、Stacking Ensemble |
-| 新增觀看迴歸 | LightGBM Regression、LSTM Regression |
+| **A** | 靜態特徵（影片長度、發布小時、是否 Shorts、標題長度、標籤數、`log_subscriber_count`）|
+| **B** | A + 早期流量（0–3h 觀看/按讚/留言、增量、成長率、每分鐘觀看數、互動率、log 版本）|
+| **C1** | B + 留言二元情緒（`comment_sentiment_score`、`top_comment_like_ratio`、`comment_count_3h`）|
+| **C2** | B + Valence-Arousal proxy（valence/arousal 均值、標準差、高喚醒比例）|
+| **C3** | B + C1 + C2（全部留言特徵）|
 
-Stacking Ensemble 使用 LightGBM 與 LSTM 的 out-of-fold 預測作為 Level-1 特徵，再以 Logistic Regression 作為 meta-learner。
+Group B 共 20 個特徵，Group C3 共 28 個特徵。
 
-## 7. 實驗結果
+### 5.2 留言情緒特徵建立方法
 
-### 7.1 分類結果
+**Group C1（Binary Sentiment）**：使用 HuggingFace 模型 `uer/roberta-base-finetuned-jd-binary-chinese` 對每則留言推論 positive 機率，彙整為影片層級平均值。
 
-以下為 test set 結果：
+**Group C2（Valence-Arousal）**：
+- Valence：以 sentiment score 為 proxy
+- Arousal：以驚嘆號密度 + emoji 密度 + 強烈詞彙比例為 proxy（正規表達式計算，不需額外模型）
 
-| 模型 | F1-score | Precision | Recall | AUC-ROC | PR-AUC | Threshold |
-|---|---:|---:|---:|---:|---:|---:|
-| Logistic Regression | 0.4043 | 0.2603 | **0.9048** | 0.9106 | 0.7748 | 0.5000 |
-| **LightGBM** | **0.5882** | **0.5000** | 0.7143 | **0.9398** | **0.7992** | 0.5839 |
-| LSTM | 0.2679 | 0.1648 | 0.7143 | 0.5986 | 0.1377 | 0.4881 |
-| Stacking Ensemble | 0.4776 | 0.3478 | 0.7619 | **0.9389** | 0.7975 | 0.5859 |
+### 5.3 LSTM Sequence 格式
 
-LightGBM 在 F1-score 與 PR-AUC 上皆為最佳，因此是目前最適合的主模型。Logistic Regression 的 recall 最高，可找回 90.48% viral 影片，但誤報較多。LSTM 在加入類別不平衡加權損失（pos_weight）後，recall 提升至 71.43%，但 precision 偏低，整體 F1 仍落後於 LightGBM。Stacking Ensemble 的 AUC-ROC（0.9389）略優於 LightGBM，但 F1 因為 LSTM precision 較低而受到拉低。
+- 分類：`T × 3` 陣列 `[view_count, like_count, comment_count]`，0–3h，每個欄位以該影片時間窗內最大值正規化
+- 迴歸：`T × 4` 陣列（額外加入 `log1p(max_views)`），0–48h
 
-### 7.2 分類混淆矩陣
-
-| 模型 | True Negative | False Positive | False Negative | True Positive |
-|---|---:|---:|---:|---:|
-| Logistic Regression | 109 | 54 | 2 | 19 |
-| **LightGBM** | **148** | **15** | **6** | **15** |
-| LSTM | 87 | 76 | 6 | 15 |
-| Stacking Ensemble | 133 | 30 | 5 | 16 |
-
-若實際應用重視降低誤報，建議使用 LightGBM（FP 僅 15）。若應用重視盡可能不漏掉潛在熱門影片，可考慮 Logistic Regression 或 LSTM（recall 均達 71%+），再透過人工審核處理候選名單。
-
-### 7.3 迴歸結果
-
-以下指標均在模型實際預測目標 `log1p(next_24h_views)` 上計算：
-
-| 模型 | Split | MAE | RMSE | RMSLE | R² | 樣本數 |
-|---|---|---:|---:|---:|---:|---:|
-| **LightGBM Regression** | Validation | **0.7886** | **1.1126** | **0.3385** | **0.8586** | 213 |
-| **LightGBM Regression** | Test | **1.0218** | **1.4050** | **0.4211** | **0.7667** | 214 |
-| LSTM Regression | Validation | 0.9294 | 1.2706 | 0.3692 | 0.8052 | 206 |
-| LSTM Regression | Test | 1.2455 | 1.5744 | 0.4901 | 0.7015 | 208 |
-
-LightGBM Regression 的 test R² 為 0.7667，優於 LSTM Regression 的 0.7015。在轉回原始觀看數尺度後，LightGBM test MAE 約為 3,926 views，RMSE 約為 42,267 views。RMSE 明顯偏高，反映少數極端熱門影片仍會造成大誤差。
-
-整體迴歸目標呈現高度長尾：
-
-| 統計量 | `next_24h_views` |
-|---|---:|
-| Median | 94.5 |
-| Mean | 4,999.5 |
-| 90th percentile | 5,600 |
-| Maximum | 630,076 |
-
-## 8. SHAP 特徵重要性
-
-LightGBM 分類模型的前 10 名 SHAP 特徵如下：
+### 5.4 SHAP 特徵重要性（LightGBM Group B）
 
 | 排名 | 特徵 | Mean Absolute SHAP |
 |---:|---|---:|
-| 1 | `view_delta_1h_3h` | 0.7265 |
-| 2 | `log_subscriber_count` | 0.6864 |
-| 3 | `title_length` | 0.1949 |
-| 4 | `duration_seconds` | 0.1769 |
-| 5 | `publish_hour` | 0.1643 |
-| 6 | `views_3h` | 0.1289 |
-| 7 | `view_delta_0h_1h` | 0.0830 |
-| 8 | `log_views_3h` | 0.0665 |
-| 9 | `views_per_minute_early` | 0.0622 |
-| 10 | `view_growth_rate_1h` | 0.0552 |
+| 1 | `log_subscriber_count` | 2.109 |
+| 2 | `views_3h` | 0.770 |
+| 3 | `view_delta_1h_3h` | 0.683 |
+| 4 | `likes_3h` | 0.411 |
+| 5 | `title_length` | 0.327 |
+| 6 | `publish_hour` | 0.272 |
+| 7 | `duration_seconds` | 0.231 |
+| 8 | `engagement_rate_early` | 0.178 |
+| 9 | `views_per_minute_early` | 0.109 |
+| 10 | `tag_count` | 0.097 |
 
-最重要的特徵是 `view_delta_1h_3h`，顯示影片發布後 1 至 3 小時是否持續加速，是預測 48 小時爆紅的重要訊號。`log_subscriber_count` 排名第二，表示頻道基礎受眾仍然具有影響力。其餘重要特徵則包含標題長度、影片長度、發布時間與 3 小時累積觀看數。
+![SHAP 特徵重要性](results/figures/fig06_shap_importance.png)
 
-## 9. 結果討論
+最重要的是 `log_subscriber_count`（SHAP=2.109），遠高於其他特徵，顯示頻道既有受眾規模是決定爆紅的基礎。其次是 `views_3h`（0.770）與 `view_delta_1h_3h`（0.683），顯示 1–3 小時的成長動能是最重要的早期訊號。
 
-### 9.1 為何 LightGBM 表現較佳
+![早期觀看數 vs 是否爆紅](results/figures/fig07_views3h_vs_viral.png)
+![觀看增量分布](results/figures/fig08_growth_rate_dist.png)
+![留言 Valence-Arousal 散布圖](results/figures/fig17_comment_valence_arousal.png)
 
-目前資料量仍屬中小型，且分類目標具有不平衡問題。LightGBM 能有效利用觀看增量、訂閱數、互動率等人工設計特徵，對資料規模的需求也較低，因此在本次實驗中優於 LSTM。
+## 6. 實驗設計
 
-### 9.2 為何 LSTM 分類表現不如 LightGBM
+### 6.1 模型組合
 
-LSTM 分類器在加入類別不平衡加權損失（`BCEWithLogitsLoss(pos_weight≈6.9)`）後，test set recall 達 71.43%，F1-score 為 0.2679。雖然不再全部預測負類，但 precision 僅 16.5%，表示誤報率仍高。主要原因包括：
+| 任務 | 模型 | 說明 |
+|---|---|---|
+| 分類 | Logistic Regression | Group A/B/C1，以 StandardScaler 標準化，`class_weight='balanced'` |
+| 分類 | LightGBM | Group A/B/C1/C2/C3，5-Fold OOF，`scale_pos_weight` 處理類別不平衡 |
+| 分類 | LSTM | Group B，`T×3` 序列，BCEWithLogitsLoss + pos_weight |
+| 分類 | Stacking | LightGBM B OOF + LSTM OOF → Logistic Regression meta-learner |
+| 迴歸 | LightGBM | Group B/C1 |
+| 迴歸 | LSTM | Group B，`T×4` 序列 |
 
-1. Viral 樣本僅 145 部，序列模型可學習的正類案例不足。
-2. 每部影片的 snapshot 密度與時間間距不完全一致。
-3. 每個序列各自以最大值正規化，削弱了絕對觀看規模訊號。迴歸 LSTM 已透過附加 `log1p(max_views)` 作為第 4 維特徵修正此問題；分類 LSTM 尚未加入此修正。
-4. Tabular 模型能直接使用訂閱數、標題長度、發布時間等重要特徵，LSTM 分類器目前只看到觀看、按讚與留言序列。
+### 6.2 Stacking 架構
 
-### 9.3 為何 Stacking 沒有超越 LightGBM
-
-Stacking Ensemble 的 test AUC-ROC 為 0.9389，略優於 LightGBM 的 0.9398，但 F1-score 為 0.4776，低於 LightGBM 的 0.5882。LSTM recall 雖高，但 precision 偏低，導致 Stacking 傾向多預測正類，FP 數從 LightGBM 的 15 增至 30。若以 AUC 為主要指標，Stacking 與 LightGBM 差距不大；若以 F1 或誤報率為考量，LightGBM 仍較適合直接使用。
-
-### 9.4 Shorts-only 蒐集策略的影響
-
-目前爬蟲已切換為 Shorts-only，以補足過去 Shorts 樣本不足的問題。但本次分類資料中 Shorts 僅占 8.18%，因為新的 Shorts 至少需要等待 48 小時才能形成標籤。
-
-因此，本次報告可以支持「早期特徵可預測後續爆紅」的結論，但尚不足以對 Shorts-only 場景做最終結論。未來應在累積更多完整 Shorts 樣本後，重新訓練並比較模型表現。
-
-## 10. 限制
-
-本專題目前仍有以下限制：
-
-1. **Shorts 樣本仍不足。** 最新爬蟲策略已改善蒐集方向，但新樣本尚未成熟。
-2. **Checkpoint 可能缺失。** 若爬蟲過晚發現影片，無法回補 3h 或 48h 的歷史觀看數。
-3. **留言文字尚未建模。** 已收集 38,918 筆留言紀錄，但 sentiment 與 emotion 特徵尚未加入模型。
-4. **資料仍在持續成長。** 本報告採 fixed processed snapshot；重新 preprocessing 後數字會改變。
-5. **分類不平衡。** Viral 僅占 11.87%，F1-score 與 PR-AUC 比 accuracy 更具參考價值。
-6. **迴歸長尾嚴重。** 少數極熱門影片會顯著提高原始觀看數尺度上的 RMSE。
-7. **LSTM 訓練仍可進一步調校。** 訓練使用 GPU 加速（CUDA 12.8，torch 2.11.0+cu128），但尚未做完整超參數搜尋與多次隨機種子實驗。
-8. **`RMSLE` 欄位需謹慎解讀。** 目前 evaluator 對已經過 `log1p` 的迴歸目標再次計算 log-based error，因此報告應優先引用 MAE、RMSE 與 R²，並註明皆位於 log target 尺度。
-
-## 11. 結論
-
-本專題完成一套可持續運作的 YouTube 影片資料蒐集、前處理、模型訓練與評估流程。實驗顯示：
-
-1. 使用發布後前 3 小時的資料，能有效預測影片 48 小時內是否爆紅。
-2. LightGBM 是目前最佳分類模型，test F1-score 為 0.5882，AUC-ROC 為 0.9398，PR-AUC 為 0.7992。
-3. 發布後 1 至 3 小時的觀看增量，是最重要的爆紅預測特徵。
-4. LightGBM Regression 能以 0 至 48 小時資料預測接下來 24 小時增長，在 log target 上取得 test R² 0.7667。
-5. 在目前資料量下，結構化特徵搭配 LightGBM 比 LSTM 更穩定；LSTM 加入類別加權損失後 recall 提升，但 precision 仍偏低；Stacking 的 AUC 略優但 F1 未超越 LightGBM。
-
-若作為實際系統部署，建議先採用 LightGBM 作為主要模型，持續透過 Shorts-only 爬蟲累積完整樣本，再加入留言情緒特徵並重新評估。
-
-## 12. 後續工作
-
-可延伸方向如下：
-
-1. 累積更多完整 Shorts 3h / 48h / 72h checkpoint。
-2. 將留言文字轉換為 sentiment、valence-arousal 或 embedding 特徵。
-3. 針對 Shorts 與一般影片分別建立模型，再比較是否需要不同 threshold。
-4. 對 LSTM 加入頻道規模、影片長度與發布時間等靜態特徵。
-5. 對分類 LSTM 加入絕對觀看規模訊號（如 `log1p(max_views)`），與迴歸 LSTM 現行做法一致。
-6. 對不同 threshold 進行 precision-recall trade-off 分析。
-7. 增加 repeated runs 與不同 random seed，檢查結果穩定性。
-
-## 13. 可直接放入簡報的重點
-
-### 問題
-
-- 能否在影片發布後 3 小時內，預測 48 小時後是否爆紅？
-- 能否用前 48 小時資料，預測接下來 24 小時觀看成長？
-
-### 資料
-
-- 162,396 筆清理後時間序列。
-- 1,222 筆分類樣本，viral 比例 11.87%。
-- 1,420 筆迴歸樣本。
-- 爬蟲持續運作，並已切換 Shorts-only。
-
-### 最佳結果
-
-- 分類：LightGBM，F1 = 0.5882，AUC-ROC = 0.9398。
-- 迴歸：LightGBM，R² = 0.7667。
-- 最重要特徵：發布後 1 至 3 小時觀看增量。
-
-### 核心結論
-
-影片是否爆紅，不只取決於最初觀看量，更重要的是發布後數小時內是否持續加速。
-
-## 14. 參考資料
-
-1. Ke, G. et al. (2017). [LightGBM: A Highly Efficient Gradient Boosting Decision Tree](https://proceedings.neurips.cc/paper_files/paper/2017/hash/6449f44a102fde848669bdd9eb6b76fa-Abstract.html). *Advances in Neural Information Processing Systems 30*.
-2. Hochreiter, S. and Schmidhuber, J. (1997). [Long Short-Term Memory](https://doi.org/10.1162/neco.1997.9.8.1735). *Neural Computation*, 9(8), 1735-1780.
-3. Lundberg, S. M. and Lee, S.-I. (2017). [A Unified Approach to Interpreting Model Predictions](https://proceedings.neurips.cc/paper_files/paper/2017/hash/8a20a8621978632d76c43dfd28b67767-Abstract.html). *Advances in Neural Information Processing Systems 30*.
-4. Pedregosa, F. et al. (2011). [Scikit-learn: Machine Learning in Python](https://www.jmlr.org/papers/v12/pedregosa11a.html). *Journal of Machine Learning Research*, 12, 2825-2830.
-
-## 附錄 A：輸出檔案
-
-| 檔案 | 說明 |
-|---|---|
-| `data/processed/label_dataset.csv` | 分類標籤 |
-| `data/processed/tabular_features.csv` | 分類 tabular features |
-| `data/processed/regression_dataset.csv` | 迴歸目標 |
-| `data/processed/regression_features_48h.csv` | 迴歸 features |
-| `results/metrics.csv` | 分類評估指標 |
-| `results/regression_metrics.csv` | 迴歸評估指標 |
-| `results/feature_importance_shap.csv` | SHAP 特徵重要性 |
-| `results/report_snapshot.json` | 本報告使用的統計快照 |
-| `models/lightgbm_classifier.pkl` | 最佳分類模型 |
-| `models/lightgbm_regressor.pkl` | 最佳迴歸模型 |
-
-## 附錄 B：重現流程
-
-```powershell
-python -m src.preprocessing.run_all
-python -m src.modeling.train_logistic
-python -m src.modeling.train_lightgbm
-python -m src.modeling.train_regression
-python -m src.modeling.train_lstm --task classification
-python -m src.modeling.train_lstm --task regression
-python -m src.modeling.train_stacking
-python -m src.modeling.shap_analysis
+```
+LightGBM(tabular)  —OOF→  P1
+LSTM(sequence)     —OOF→  P2
+                           ↓
+LogisticRegression([P1, P2]) → final probability
 ```
 
-本次執行前，系統額外安裝：
+Meta-learner 在 train split 的 OOF 預測上訓練（非 in-sample），符合 No-leakage 要求。
 
-```powershell
-python -m pip install torch shap
-```
+### 6.3 防洩漏規範
+
+1. 分類特徵：只使用 0–3h 資料
+2. 迴歸特徵：只使用 0–48h 資料
+3. 留言：只使用 t3h snapshot 內的留言
+4. Scaler/Encoder：僅在 train split fit
+5. Meta-learner：在 OOF 預測（非 in-sample）上訓練
+
+## 7. 實驗結果
+
+### 7.1 分類測試集結果
+
+| 模型 | 群組 | F1 | Precision | Recall | AUC-ROC | PR-AUC |
+|---|---|---:|---:|---:|---:|---:|
+| Logistic | A | 0.283 | 0.171 | 0.808 | 0.643 | 0.209 |
+| Logistic | B | 0.520 | 0.368 | **0.885** | 0.905 | 0.649 |
+| Logistic | C1 | 0.528 | 0.373 | 0.904 | 0.907 | 0.650 |
+| LightGBM | A | 0.327 | 0.310 | 0.346 | 0.733 | 0.280 |
+| LightGBM | B | 0.731 | 0.731 | 0.731 | 0.937 | 0.800 |
+| LightGBM | C1 | 0.752 | 0.776 | 0.731 | **0.943** | 0.818 |
+| **LightGBM** | **C2** | **0.763** | **0.822** | 0.712 | 0.934 | 0.809 |
+| LightGBM | C3 | 0.740 | 0.771 | 0.712 | 0.939 | **0.832** |
+| LSTM | B | 0.257 | 0.157 | 0.705 | 0.590 | 0.146 |
+| Stacking | B | 0.674 | 0.611 | 0.750 | 0.919 | 0.783 |
+
+LightGBM Group C2 以 F1=0.763 為最高；若以 AUC 為首要指標，Group C1（AUC=0.943）最佳；若以 PR-AUC，Group C3（0.832）略優。留言情緒特徵（C1–C3）相對 Group B 一致帶來改善，顯示即使僅 34% 覆蓋率仍有正向貢獻。
+
+![ROC 曲線](results/figures/fig09_roc_curves.png)
+![PR 曲線](results/figures/fig10_pr_curves.png)
+![混淆矩陣（LightGBM B）](results/figures/fig11_confusion_matrix_lgbm.png)
+![閾值敏感度](results/figures/fig12_threshold_sensitivity.png)
+
+### 7.2 Ablation Study（分類）
+
+![Ablation 比較](results/figures/fig13_ablation_classification.png)
+
+Group A（靜態特徵）至 Group B（加入早期流量）是最大的效能躍升：LightGBM F1 從 0.327 升至 0.731，AUC 從 0.733 升至 0.937。這證實早期觀看速度是爆紅預測的核心資訊。Group C 系列因留言覆蓋率約 34%，改善效果有限但方向一致（F1 +0.01 至 +0.03）。
+
+### 7.3 迴歸測試集結果
+
+| 模型 | 群組 | MAE | RMSE | RMSLE | R² |
+|---|---|---:|---:|---:|---:|
+| LightGBM | B | 0.841 | 1.172 | 0.343 | 0.851 |
+| **LightGBM** | **C1** | **0.835** | **1.162** | **0.332** | **0.853** |
+| LSTM | B | 1.137 | 1.610 | 0.445 | 0.705 |
+
+（指標皆在 `log_next_24h_views` 尺度計算）
+
+LightGBM Group C1 比 Group B 稍好（R²=0.853 vs 0.851）。LSTM 迴歸 R²=0.705，明顯低於 LightGBM，原因與分類任務相同——序列模型在此資料量下學習能力受限。
+
+![預測 vs 實際（LightGBM C1）](results/figures/fig14_reg_pred_vs_actual.png)
+![殘差分布](results/figures/fig15_reg_residuals.png)
+
+### 7.4 Ablation Study（迴歸）
+
+![Ablation 迴歸比較](results/figures/fig16_ablation_regression.png)
+
+## 8. 結果討論
+
+### 8.1 為何 LightGBM 表現最佳
+
+1. **特徵工程效果顯著**：SHAP 顯示 `log_subscriber_count` 的絕對重要性極高（SHAP=2.109），而這類結構化特徵 LightGBM 能直接利用。
+2. **資料量適中**：1,916 樣本對 LightGBM 已足夠，對序列模型則偏少。
+3. **分類不平衡**：LightGBM 透過 `scale_pos_weight` 有效處理 12.58% 病毒率的不平衡問題。
+
+### 8.2 為何 LSTM 分類表現較弱
+
+1. Viral 樣本約 241 部，序列模型可學習的正類案例不足。
+2. 高 pos_weight 使模型偏向全部預測正類，test recall 高但 precision 低（F1 只有 0.257）。
+3. LSTM 分類只看到觀看、按讚、留言序列，缺乏訂閱數等強特徵。
+4. 每個序列以最大值各自正規化，削弱了絕對規模訊號。
+
+### 8.3 為何 Stacking 未超越 LightGBM
+
+Stacking test F1=0.674，略低於 LightGBM B 的 0.731。LSTM 的低品質預測拉低了融合效果。若 LSTM 能改善（加入靜態特徵、增加資料量），Stacking 有機會超越單一 LightGBM。Stacking AUC=0.919 仍相當好，代表機率校準較優。
+
+### 8.4 留言情緒特徵的效益
+
+Group C1–C3 在 34% 覆蓋率下仍帶來一致的正向效果：
+- C1 相較 B：AUC 從 0.937 升至 0.943，F1 從 0.731 升至 0.752
+- C2 相較 B：F1 從 0.731 升至 0.763（最高），Precision 顯著提升（0.731 → 0.822）
+- C3 相較 B：PR-AUC 從 0.800 升至 0.832（最高）
+
+這顯示即使只有三分之一的樣本有留言資料，情緒特徵仍有信號。若覆蓋率提升至 70% 以上，改善幅度預期更大。
+
+### 8.5 分組時序切分的重要性
+
+舊切分方式中，test set 幾乎全為 Shorts（因為 Shorts 集中在後期爬蟲加入）。新的分組切分使每個 split 維持約 34% Shorts，模型訓練與評估的影片類型分布一致，結果更有意義。
+
+![影片類別分布](results/figures/fig04_category_distribution.png)
+![成長曲線範例](results/figures/fig05_growth_curve_examples.png)
+![觀看 CDF](results/figures/fig02_view_cdf_by_type.png)
+
+## 9. 限制
+
+1. **留言情緒覆蓋率偏低**（34%）：C 系列特徵雖有正向效果，但仍有大量樣本以 0 填補，若覆蓋率更高效益預期更明顯。
+2. **LSTM 訓練仍可改善**：未做超參數搜尋，也未加入靜態特徵或位置編碼。
+3. **資料已固定**：爬蟲於 2026-06-10 停止，結果基於此時點的 fixed snapshot。
+4. **長尾分布**：迴歸 RMSE 受少數極熱門影片影響偏高，MAE 更具參考性。
+5. **RMSLE 解讀**：所有迴歸指標已位於 `log1p` 目標尺度，RMSLE 是對已取 log 的值再次做 log 轉換的誤差，報告時以 MAE、RMSE、R² 為主。
+
+## 10. 結論
+
+本專題完成完整的 YouTube 影片資料蒐集、前處理、特徵工程、模型訓練與評估流程，主要發現：
+
+1. **使用發布後前 3 小時的資料，可有效預測 48 小時內是否爆紅**。LightGBM Group C2 測試集 F1=**0.763**、AUC=0.934；Group C1 AUC=**0.943**；Group B（純早期流量）即有 F1=0.731、AUC=0.937。
+2. **頻道訂閱數與早期成長速度是最關鍵特徵**。`log_subscriber_count` SHAP 值（2.109）遠高於其他特徵，顯示既有受眾規模是爆紅的基礎條件；`views_3h`（0.770）與 `view_delta_1h_3h`（0.683）反映早期動能。
+3. **留言情緒特徵在 34% 覆蓋率下仍有正向效果**。C1/C2/C3 相對 B 的 F1 改善約 0.01–0.03，PR-AUC 最多改善 0.032（C3）。
+4. **分組時序切分解決了 Shorts 分布偏斜問題**。新切分每個 split 均維持約 34% Shorts，使評估具有代表性。
+5. **LightGBM 迴歸 R²=0.853**（Group C1），可在 48h 後合理預測未來 24h 觀看增量，為創作者提供策略參考。
+
+## 11. 後續工作
+
+1. 提升留言 t3h 快照覆蓋率（目前 34%），以充分評估情緒特徵效益。
+2. 對 LSTM 分類器加入靜態特徵（訂閱數、影片長度等），解決只看序列訊號的侷限。
+3. 對 Shorts 與長影片分別建立模型，比較是否需要不同閾值與特徵集。
+4. 增加多次隨機種子實驗，評估結果穩定性。
+5. 針對不同 threshold 進行更詳細的 precision-recall trade-off 分析。
+6. 若重啟蒐集，可測試 attention-based 或 Transformer 序列模型。

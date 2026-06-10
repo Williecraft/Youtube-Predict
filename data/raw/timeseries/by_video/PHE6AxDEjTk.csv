@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+PHE6AxDEjTk,2026-06-06T04:22:56Z,89.8,1002,20,3,10800,OK
+PHE6AxDEjTk,2026-06-06T04:33:36Z,100.4,1002,16,2,10800,OK
+PHE6AxDEjTk,2026-06-06T04:42:47Z,109.6,1002,16,2,10800,OK
+PHE6AxDEjTk,2026-06-06T04:54:27Z,121.3,1002,16,2,10800,UNPLAYABLE

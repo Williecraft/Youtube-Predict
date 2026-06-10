@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+RxmTXunOfAk,2026-06-03T12:01:01Z,85.7,141,2,,14600,OK
+RxmTXunOfAk,2026-06-03T12:11:07Z,95.8,161,2,,14600,OK
+RxmTXunOfAk,2026-06-03T12:21:17Z,106.0,198,2,,14600,OK
+RxmTXunOfAk,2026-06-03T12:31:51Z,116.6,216,3,,14600,OK
+RxmTXunOfAk,2026-06-03T12:42:46Z,127.5,242,3,,14600,UNPLAYABLE

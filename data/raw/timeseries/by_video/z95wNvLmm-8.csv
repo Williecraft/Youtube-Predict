@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+z95wNvLmm-8,2026-06-05T02:14:42Z,44.6,3730,19,1,88300,OK
+z95wNvLmm-8,2026-06-05T02:25:22Z,55.3,4102,21,1,88300,OK
+z95wNvLmm-8,2026-06-05T02:34:17Z,64.2,4378,23,2,88400,OK
+z95wNvLmm-8,2026-06-05T02:44:49Z,74.8,4637,26,2,88400,OK
+z95wNvLmm-8,2026-06-05T02:54:24Z,84.3,4826,26,2,88400,UNPLAYABLE

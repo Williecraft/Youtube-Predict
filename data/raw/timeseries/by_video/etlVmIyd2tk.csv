@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+etlVmIyd2tk,2026-06-05T00:15:06Z,134.9,0,0,,792,OK
+etlVmIyd2tk,2026-06-05T00:26:38Z,146.5,0,0,,792,OK
+etlVmIyd2tk,2026-06-05T00:35:32Z,155.4,0,0,,792,OK
+etlVmIyd2tk,2026-06-05T00:45:19Z,165.2,0,0,,792,UNPLAYABLE

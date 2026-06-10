@@ -1,2 +1,5 @@
 video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
 -20KXXfWA6A,2026-06-03T06:34:41Z,180.3,459,1,,616000,OK
+-20KXXfWA6A,2026-06-03T08:35:10Z,300.8,459,1,,616000,OK
+-20KXXfWA6A,2026-06-03T10:34:47Z,420.4,469,2,,616000,OK
+-20KXXfWA6A,2026-06-03T12:36:55Z,542.5,481,3,1,616000,UNPLAYABLE

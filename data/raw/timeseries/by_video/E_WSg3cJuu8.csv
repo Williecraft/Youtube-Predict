@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+E_WSg3cJuu8,2026-06-07T04:12:00Z,17.7,314,13,,1480000,OK
+E_WSg3cJuu8,2026-06-07T04:21:50Z,27.5,627,22,,1480000,OK
+E_WSg3cJuu8,2026-06-07T04:33:33Z,39.2,852,26,,1480000,OK
+E_WSg3cJuu8,2026-06-07T04:42:00Z,47.7,897,26,,1480000,OK
+E_WSg3cJuu8,2026-06-07T04:52:50Z,58.5,911,26,1,1480000,UNPLAYABLE

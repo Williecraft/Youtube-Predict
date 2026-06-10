@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+p1RxNkRneTU,2026-06-07T21:08:58Z,44.9,3387,42,4,30500,OK
+p1RxNkRneTU,2026-06-07T21:18:05Z,54.0,5163,72,4,30500,OK
+p1RxNkRneTU,2026-06-07T21:28:24Z,64.3,6557,93,4,30500,OK
+p1RxNkRneTU,2026-06-07T21:39:49Z,75.7,7986,125,5,30500,OK
+p1RxNkRneTU,2026-06-07T21:48:13Z,84.1,8840,141,6,30500,UNPLAYABLE

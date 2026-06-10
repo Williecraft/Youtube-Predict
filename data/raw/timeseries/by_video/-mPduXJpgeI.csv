@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+-mPduXJpgeI,2026-06-05T11:08:22Z,66.7,1353,16,3,2140000,OK
+-mPduXJpgeI,2026-06-05T11:17:56Z,76.3,1559,17,4,2140000,OK
+-mPduXJpgeI,2026-06-05T11:28:13Z,86.5,1724,20,4,2140000,OK
+-mPduXJpgeI,2026-06-05T11:37:50Z,96.2,1827,20,4,2140000,OK
+-mPduXJpgeI,2026-06-05T11:47:39Z,106.0,1875,21,4,2140000,UNPLAYABLE

@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+axFOsEZwANU,2026-06-04T06:22:47Z,58.2,0,0,,75,OK
+axFOsEZwANU,2026-06-04T06:34:04Z,69.5,0,0,,75,OK
+axFOsEZwANU,2026-06-04T06:42:18Z,77.7,1,1,,75,OK
+axFOsEZwANU,2026-06-04T06:52:25Z,87.8,2,1,,75,UNPLAYABLE

@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+DM30on_3G3I,2026-06-03T11:20:21Z,84.2,4133,120,12,17900,OK
+DM30on_3G3I,2026-06-03T11:30:38Z,94.5,4475,144,13,17900,OK
+DM30on_3G3I,2026-06-03T11:40:34Z,104.4,4756,161,14,17900,OK
+DM30on_3G3I,2026-06-03T11:50:38Z,114.5,5121,177,14,17900,UNPLAYABLE

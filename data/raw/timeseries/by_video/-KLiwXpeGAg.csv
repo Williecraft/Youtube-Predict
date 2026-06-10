@@ -1,0 +1,5 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+-KLiwXpeGAg,2026-06-03T11:22:45Z,25.4,60,1,,72000,OK
+-KLiwXpeGAg,2026-06-03T11:32:07Z,34.8,79,1,1,72000,OK
+-KLiwXpeGAg,2026-06-03T11:44:35Z,47.3,85,2,1,72000,OK
+-KLiwXpeGAg,2026-06-03T11:54:05Z,56.8,88,2,1,72000,UNPLAYABLE

@@ -1,0 +1,8 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+sS3qfaPTI5c,2026-06-05T12:43:21Z,51.1,47,2,,20200,OK
+sS3qfaPTI5c,2026-06-05T12:55:13Z,63.0,54,2,,20299,OK
+sS3qfaPTI5c,2026-06-05T13:07:51Z,75.6,60,2,,20299,OK
+sS3qfaPTI5c,2026-06-05T13:13:54Z,81.7,61,2,,20299,OK
+sS3qfaPTI5c,2026-06-05T13:23:30Z,91.3,69,2,,20299,OK
+sS3qfaPTI5c,2026-06-05T13:36:20Z,104.1,79,2,,20299,OK
+sS3qfaPTI5c,2026-06-05T13:43:31Z,111.3,87,2,,20299,UNPLAYABLE

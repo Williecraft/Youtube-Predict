@@ -1,0 +1,4 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+-b6pqtmhCnc,2026-06-08T03:36:08Z,61.5,1741,43,2,225000,OK
+-b6pqtmhCnc,2026-06-08T03:44:00Z,69.4,2125,52,2,225000,OK
+-b6pqtmhCnc,2026-06-08T03:54:25Z,79.8,2476,63,2,225000,UNPLAYABLE

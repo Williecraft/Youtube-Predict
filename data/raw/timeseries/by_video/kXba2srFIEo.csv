@@ -1,0 +1,6 @@
+video_id,crawl_time,time_since_publish_minutes,view_count,like_count,comment_count,subscriber_count,video_status
+kXba2srFIEo,2026-06-04T05:25:01Z,12.2,0,0,,40,OK
+kXba2srFIEo,2026-06-04T05:35:09Z,22.3,0,0,,40,OK
+kXba2srFIEo,2026-06-04T05:44:32Z,31.7,0,0,,40,OK
+kXba2srFIEo,2026-06-04T05:55:09Z,42.3,2,1,,40,OK
+kXba2srFIEo,2026-06-04T06:06:13Z,53.4,,,,,ERROR
